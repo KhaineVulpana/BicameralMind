@@ -1,9 +1,8 @@
 """Right Brain: Pattern Violation and Mutation"""
 from core.base_agent import BrainAgent, Message, MessageType
-from core.memory import ProceduralMemory, Bullet, Hemisphere
 from typing import Dict, Any, List
 import asyncio
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate
 
 
 class RightBrain(BrainAgent):
@@ -15,12 +14,10 @@ class RightBrain(BrainAgent):
     - Explores novel combinations
     - Generates open-ended possibilities
     """
-
-    def __init__(self, config: Dict[str, Any], llm_client, procedural_memory: ProceduralMemory | None = None):
+    
+    def __init__(self, config: Dict[str, Any], llm_client):
         super().__init__("RightBrain", config.get("right_brain", {}))
         self.llm = llm_client
-        self.procedural_memory = procedural_memory
-        self.hemisphere = Hemisphere.RIGHT
         self.anomalies = []
         self.mutations = []
         self.exploration_template = ChatPromptTemplate.from_messages([
@@ -40,40 +37,13 @@ Embrace uncertainty and possibility space.
             ("human", "{input}")
         ])
     
-    def _format_playbook(self, bullets: List[Bullet]) -> str:
-        """Format bullets as playbook for prompt context."""
-        if not bullets:
-            return "(none)"
-
-        if self.procedural_memory:
-            return self.procedural_memory.format_bullets_for_prompt(bullets)
-
-        # Fallback simple format
-        lines = []
-        for b in bullets:
-            prefix = "[SHARED]" if b.side == Hemisphere.SHARED else "[RIGHT]"
-            lines.append(f"- {prefix} ({b.type.value}, conf={b.confidence:.2f}, +{b.helpful_count}/-{b.harmful_count}): {b.text}")
-        return "\n".join(lines)
-
     async def process(self, message: Message) -> Message:
         """Process message through pattern-breaking lens"""
         
         content = message.content
-
-        # Retrieve procedural guidance (ACE-style bullets)
-        playbook_bullets: List[Bullet] = []
-        used_bullet_ids: List[str] = []
-        if self.procedural_memory and self.procedural_memory.enabled:
-            q = content.get("input") if isinstance(content, dict) else str(content)
-            playbook_bullets, used_bullet_ids = self.procedural_memory.retrieve(
-                query=str(q),
-                side=self.hemisphere,
-                k=16,  # Right brain uses more bullets, explores more
-                min_confidence=0.4,  # Lower threshold, more exploratory
-            )
         
         # Detect violations/anomalies
-        anomaly_check = await self.recognize_pattern(content, playbook_bullets)
+        anomaly_check = await self.recognize_pattern(content)
         
         # Generate variants/mutations
         if anomaly_check["anomaly_detected"]:
@@ -81,13 +51,13 @@ Embrace uncertainty and possibility space.
                 "task": "explore_anomaly",
                 "anomaly": anomaly_check,
                 "context": content
-            }, playbook_bullets)
+            })
         else:
             # Generate mutations anyway (exploration mode)
             response = await self.generate({
                 "task": "mutate",
                 "context": content
-            }, playbook_bullets)
+            })
         
         # Update state
         self.update_state(
@@ -102,10 +72,10 @@ Embrace uncertainty and possibility space.
             receiver=message.sender,
             msg_type=MessageType.RESULT,
             content=response,
-            metadata={"state": self.state, "used_bullet_ids": used_bullet_ids}
+            metadata={"state": self.state}
         )
     
-    async def recognize_pattern(self, data: Any, playbook: List[Bullet] | None = None) -> Dict[str, Any]:
+    async def recognize_pattern(self, data: Any) -> Dict[str, Any]:
         """Detect pattern violations, gaps, anomalies"""
         
         query = f"""Analyze this input for pattern violations:
@@ -113,9 +83,6 @@ Embrace uncertainty and possibility space.
 2. Are there anomalies, gaps, or contradictions?
 3. What's surprising or unexpected?
 4. What doesn't fit known models?
-
-Procedural playbook (strategies/heuristics to use while exploring):
-{self._format_playbook(playbook or [])}
 
 Input: {data}
 
@@ -144,15 +111,12 @@ POSSIBILITIES: [list alternative interpretations]
         
         return result
     
-    async def generate(self, context: Dict[str, Any], playbook: List[Bullet] | None = None) -> Any:
+    async def generate(self, context: Dict[str, Any]) -> Any:
         """Generate mutations, variants, alternatives"""
         
         if context["task"] == "explore_anomaly":
             query = f"""This is an anomaly/pattern violation:
 {context['anomaly']}
-
-Procedural playbook (use these as prompts/constraints):
-{self._format_playbook(playbook or [])}
 
 Generate multiple possible interpretations and responses:
 1. What could this mean?
@@ -166,9 +130,6 @@ Be divergent. Generate options.
         elif context["task"] == "mutate":
             query = f"""Mutate this pattern into variants:
 Context: {context.get('context')}
-
-Procedural playbook (use these heuristics):
-{self._format_playbook(playbook or [])}
 
 Create 3-5 variations:
 1. Extend the pattern

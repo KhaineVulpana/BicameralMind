@@ -1,9 +1,8 @@
 """Left Brain: Pattern Recognition and Replication"""
 from core.base_agent import BrainAgent, Message, MessageType
-from core.memory import ProceduralMemory, Bullet, Hemisphere
 from typing import Dict, Any, List
 import asyncio
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate
 
 
 class LeftBrain(BrainAgent):
@@ -15,12 +14,10 @@ class LeftBrain(BrainAgent):
     - Optimizes and exploits
     - Binary decision-making
     """
-
-    def __init__(self, config: Dict[str, Any], llm_client, procedural_memory: ProceduralMemory | None = None):
+    
+    def __init__(self, config: Dict[str, Any], llm_client):
         super().__init__("LeftBrain", config.get("left_brain", {}))
         self.llm = llm_client
-        self.procedural_memory = procedural_memory
-        self.hemisphere = Hemisphere.LEFT
         self.known_patterns = []
         self.decision_template = ChatPromptTemplate.from_messages([
             ("system", """You are the LEFT HEMISPHERE of a bicameral mind.
@@ -38,42 +35,15 @@ When uncertain: Explicitly state "UNDECIDABLE - needs exploration"
 """),
             ("human", "{input}")
         ])
-
-    def _format_playbook(self, bullets: List[Bullet]) -> str:
-        """Format bullets as playbook for prompt context."""
-        if not bullets:
-            return "(none)"
-
-        if self.procedural_memory:
-            return self.procedural_memory.format_bullets_for_prompt(bullets)
-
-        # Fallback simple format
-        lines = []
-        for b in bullets:
-            prefix = "[SHARED]" if b.side == Hemisphere.SHARED else "[LEFT]"
-            lines.append(f"- {prefix} ({b.type.value}, conf={b.confidence:.2f}, +{b.helpful_count}/-{b.harmful_count}): {b.text}")
-        return "\n".join(lines)
     
     async def process(self, message: Message) -> Message:
         """Process message through pattern recognition lens"""
         
         # Extract content
         content = message.content
-
-        # Retrieve procedural guidance (ACE-style bullets)
-        playbook_bullets: List[Bullet] = []
-        used_bullet_ids: List[str] = []
-        if self.procedural_memory and self.procedural_memory.enabled:
-            q = content.get("input") if isinstance(content, dict) else str(content)
-            playbook_bullets, used_bullet_ids = self.procedural_memory.retrieve(
-                query=str(q),
-                side=self.hemisphere,
-                k=8,  # Left brain uses fewer, higher-confidence bullets
-                min_confidence=0.6,
-            )
         
         # Recognize pattern
-        pattern_match = await self.recognize_pattern(content, playbook_bullets)
+        pattern_match = await self.recognize_pattern(content)
         
         # Generate response based on pattern match
         if pattern_match["matched"]:
@@ -81,7 +51,7 @@ When uncertain: Explicitly state "UNDECIDABLE - needs exploration"
                 "task": "replicate",
                 "pattern": pattern_match,
                 "context": content
-            }, playbook_bullets)
+            })
         else:
             response = {
                 "status": "no_match",
@@ -102,10 +72,10 @@ When uncertain: Explicitly state "UNDECIDABLE - needs exploration"
             receiver=message.sender,
             msg_type=MessageType.RESULT,
             content=response,
-            metadata={"state": self.state, "used_bullet_ids": used_bullet_ids}
+            metadata={"state": self.state}
         )
     
-    async def recognize_pattern(self, data: Any, playbook: List[Bullet] | None = None) -> Dict[str, Any]:
+    async def recognize_pattern(self, data: Any) -> Dict[str, Any]:
         """Check if data matches known patterns"""
         
         # Prepare recognition query
@@ -113,9 +83,6 @@ When uncertain: Explicitly state "UNDECIDABLE - needs exploration"
 1. Does it match a known structure/pattern?
 2. Can it be classified categorically?
 3. Is there a clear decision boundary?
-
-Procedural playbook (strategies/rules to follow):
-{self._format_playbook(playbook or [])}
 
 Input: {data}
 
@@ -142,7 +109,7 @@ DECISION: [if decidable]
         
         return result
     
-    async def generate(self, context: Dict[str, Any], playbook: List[Bullet] | None = None) -> Any:
+    async def generate(self, context: Dict[str, Any]) -> Any:
         """Generate output by replicating known pattern"""
         
         if context["task"] == "replicate":
@@ -151,9 +118,6 @@ DECISION: [if decidable]
             query = f"""Replicate this pattern accurately:
 Pattern: {pattern.get('pattern_id')}
 Context: {context.get('context')}
-
-Procedural playbook (follow these rules/checklists where relevant):
-{self._format_playbook(playbook or [])}
 
 Apply the known pattern to generate a response.
 Maintain consistency and structure.

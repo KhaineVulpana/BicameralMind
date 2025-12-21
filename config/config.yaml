@@ -41,22 +41,6 @@ vector_store:
   persist_directory: "./data/vector_store"
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
 
-# Procedural memory is *not* factual RAG. It stores ACE-style "playbook" bullets
-# (strategies, tool rules, failure modes) as small, itemized entries.
-procedural_memory:
-  enabled: true
-  persist_directory: "./data/memory/procedural"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-  # Cross-teaching policy:
-  # - shared_only: hemispheres primarily teach themselves; proven items promote to shared.
-  # - suggestions: (future) allow quarantine suggestions to the other hemisphere.
-  cross_teaching: "shared_only"
-  promote_threshold: 3
-  quarantine_threshold: 2
-  k_left: 8
-  k_right: 16
-  k_shared: 5
-
 mcp:
   # Enable MCP to allow the bicameral mind to call external tools via the
   # Model Context Protocol.  When ``enabled`` is true the system will

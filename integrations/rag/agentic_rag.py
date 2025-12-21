@@ -1,10 +1,10 @@
 """Agentic RAG: Iterative Retrieval with Self-Checking"""
 import asyncio
 from typing import List, Dict, Any, Optional
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.prompts import ChatPromptTemplate
 from loguru import logger
 
 

@@ -9,7 +9,6 @@ from core.left_brain.agent import LeftBrain
 from core.right_brain.agent import RightBrain
 from core.meta_controller.controller import MetaController, CognitiveMode
 from core.base_agent import Message, MessageType
-from core.memory import ProceduralMemory
 from integrations.rag.agentic_rag import AgenticRAG
 
 
@@ -36,12 +35,9 @@ class BicameralMind:
             temperature=model_config.get("temperature", 0.7)
         )
         
-        # Procedural memory (ACE-style playbooks) - separate from factual RAG
-        self.procedural_memory = ProceduralMemory(self.config)
-
         # Initialize brain hemispheres
-        self.left_brain = LeftBrain(self.config, self.llm, procedural_memory=self.procedural_memory)
-        self.right_brain = RightBrain(self.config, self.llm, procedural_memory=self.procedural_memory)
+        self.left_brain = LeftBrain(self.config, self.llm)
+        self.right_brain = RightBrain(self.config, self.llm)
         
         # Initialize meta-controller
         self.meta_controller = MetaController(
