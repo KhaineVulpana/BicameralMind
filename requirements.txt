@@ -1,0 +1,33 @@
+# Core LLM and AI
+ollama>=0.1.0
+langchain>=0.1.0
+langchain-community>=0.0.38
+langchain-core>=0.1.0
+
+# RAG and Vector DB
+chromadb>=0.4.22
+sentence-transformers>=2.3.1
+faiss-cpu>=1.7.4
+
+# MCP
+mcp>=0.9.0
+
+# Data processing
+numpy>=1.24.0
+pandas>=2.0.0
+pydantic>=2.0.0
+
+# Async and concurrency
+asyncio
+aiohttp>=3.9.0
+
+# Utilities
+python-dotenv>=1.0.0
+pyyaml>=6.0
+loguru>=0.7.0
+rich>=13.0.0
+
+# Optional multimodal (for later)
+# pillow>=10.0.0
+# opencv-python>=4.8.0
+# whisper>=1.0.0
