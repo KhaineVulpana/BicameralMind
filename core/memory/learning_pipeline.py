@@ -25,6 +25,8 @@ from .reflector import Reflector, ExecutionTrace, ReflectionInsight, OutcomeType
 from .curator import Curator
 from .procedural_memory import ProceduralMemory
 from .bullet import Bullet, Hemisphere
+from .suggestion_store import SuggestionStore
+from .suggestion_delivery import SuggestionDelivery
 
 
 @dataclass
@@ -95,7 +97,15 @@ class LearningPipeline:
         """
         self.memory = memory
         self.reflector = Reflector(llm_client)
-        self.curator = Curator(memory)
+        cross_cfg = memory.get_cross_hemisphere_config()
+        suggestions_cfg = (cross_cfg or {}).get("suggestions", {}) if cross_cfg else {}
+        self.suggestion_store = None
+        self.suggestion_delivery = None
+        if cross_cfg and cross_cfg.get("enabled") and suggestions_cfg.get("enabled"):
+            store_path = suggestions_cfg.get("store_path", "./data/memory/suggestions.jsonl")
+            self.suggestion_store = SuggestionStore(store_path)
+            self.suggestion_delivery = SuggestionDelivery(memory, self.suggestion_store, cross_cfg)
+        self.curator = Curator(memory, suggestion_store=self.suggestion_store, config=cross_cfg)
 
         # Statistics
         self.learning_history: List[LearningResult] = []
@@ -254,11 +264,37 @@ class LearningPipeline:
             side=hemisphere,
         )
 
+        # Generate cross-hemisphere suggestions from successful bullets
+        if helpful and self.suggestion_store:
+            self._maybe_generate_suggestions(trace.bullets_used, hemisphere)
+
+        if helpful:
+            self._maybe_mark_cross_confirmation(trace.bullets_used)
+
         # Update result stats
         if helpful:
             result.bullets_marked_helpful = len(trace.bullets_used)
         else:
             result.bullets_marked_harmful = len(trace.bullets_used)
+
+    def _maybe_generate_suggestions(self, bullet_ids: List[str], hemisphere: Hemisphere) -> None:
+        """Create suggestions for eligible bullets."""
+        bullets = self.memory.get_bullets_by_ids(bullet_ids)
+        if not bullets:
+            return
+        self.curator.generate_suggestions(
+            bullets=bullets,
+            from_side=hemisphere,
+            reason="successful_outcome",
+        )
+
+    def _maybe_mark_cross_confirmation(self, bullet_ids: List[str]) -> None:
+        """Mark origin bullets as cross-confirmed when taught bullets succeed."""
+        bullets = self.memory.get_bullets_by_ids(bullet_ids)
+        for bullet in bullets:
+            origin_id = bullet.metadata.get("origin_bullet_id") if bullet.metadata else None
+            if origin_id:
+                self.memory.update_bullet_metadata(origin_id, {"cross_confirmed": True})
 
     def record_outcome(
         self,
@@ -281,6 +317,17 @@ class LearningPipeline:
             helpful=helpful,
             side=hemisphere,
         )
+
+    def deliver_suggestions(
+        self,
+        tick_profile: Optional[Dict[str, Any]] = None,
+        to_side: Optional[str] = None,
+    ) -> List[Any]:
+        """Deliver pending suggestions under tick-gated conditions."""
+        if not self.suggestion_delivery:
+            return []
+        profile = tick_profile or {"is_idle": True, "pressure": 0.0}
+        return self.suggestion_delivery.deliver_pending(profile, to_side=to_side)
 
     async def run_maintenance(
         self,

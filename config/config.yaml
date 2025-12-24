@@ -191,6 +191,48 @@ procedural_memory:
     batch_size: 100  # Process bullets in batches
     parallel_processing: false  # Parallel processing (experimental)
 
+  # Phase 6: Cross-Hemisphere Learning
+  cross_hemisphere:
+    mode: "shared_only"  # shared_only | suggestions | teaching
+    enabled: true
+
+    suggestions:
+      enabled: false  # default OFF until Phase 6 is enabled
+      store_path: "./data/memory/suggestions.jsonl"
+      suggest_threshold: 2
+      min_suggest_confidence: 0.65
+      deliver_when_idle: true
+      max_pressure_to_deliver: 0.35
+      deliver_budget_per_tick: 1
+      max_pending: 2000
+      expiry_days: 14
+
+    shared:
+      promote_threshold: 3
+      harmful_tolerance: 0
+      require_cross_confirmation: false
+      translate_on_promote: true
+
+    conflicts:
+      enabled: true
+      policy: "quarantine_and_flag"  # quarantine_and_flag | conditional_merge
+
+    diversity:
+      enabled: true
+      convergence_warning_threshold: 0.15
+      throttle_on_convergence: true
+
+    exploration:
+      enabled: true
+      mode: "quota"  # quota | interval | drift | stuck | hybrid
+      window_size: 50
+      min_right_fraction: 0.25
+      interval_ticks: 20
+      stuck_window: 6
+      drift_boost_multiplier: 2.0
+      allow_right_critic_on_high_risk: true
+      exploration_safe_override: false
+
 # Novelty Detection (Phase 2.5)
 novelty_detection:
   novelty_decay: 0.8  # Exponential moving average decay (0.0-1.0)

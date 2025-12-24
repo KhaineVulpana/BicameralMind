@@ -18,6 +18,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from loguru import logger
 
+from .config_utils import get_cross_hemisphere_config
 
 @dataclass
 class ProceduralBullet:
@@ -33,9 +34,10 @@ class ProceduralBullet:
     created_at: str = ""
     last_used_at: str = ""
     source_trace_id: str = ""
+    metadata: Dict[str, Any] = None
 
     def to_metadata(self) -> Dict[str, Any]:
-        return {
+        data = {
             "id": self.id,
             "side": self.side,
             "type": self.type,
@@ -48,6 +50,13 @@ class ProceduralBullet:
             "last_used_at": self.last_used_at,
             "source_trace_id": self.source_trace_id,
         }
+        for key, value in (self.metadata or {}).items():
+            meta_key = f"meta_{key}"
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                data[meta_key] = value
+            else:
+                data[meta_key] = str(value)
+        return data
 
 
 class ProceduralMemoryStore:
@@ -75,8 +84,14 @@ class ProceduralMemoryStore:
         )
 
         # Learning policy
-        self.cross_teaching = cfg.get("cross_teaching", "shared_only")  # shared_only|suggestions
-        self.promote_threshold = int(cfg.get("promote_threshold", 3))
+        cross_cfg = get_cross_hemisphere_config(config)
+        cross_mode = cross_cfg.get("mode")
+        self.cross_teaching = (cross_mode or cfg.get("cross_teaching", "shared_only")).lower()
+        shared_cfg = cross_cfg.get("shared", {}) or {}
+        self.promote_threshold = int(shared_cfg.get("promote_threshold", cfg.get("promote_threshold", 3)))
+        self.harmful_tolerance = int(shared_cfg.get("harmful_tolerance", 0))
+        self.require_cross_confirmation = bool(shared_cfg.get("require_cross_confirmation", False))
+        self.translate_on_promote = bool(shared_cfg.get("translate_on_promote", False))
         self.quarantine_threshold = int(cfg.get("quarantine_threshold", 2))
 
         self.k_left = int(cfg.get("k_left", 8))
@@ -131,6 +146,14 @@ class ProceduralMemoryStore:
         vecs = self._embedder.encode(texts, normalize_embeddings=True)
         return vecs.tolist() if hasattr(vecs, "tolist") else list(vecs)
 
+    @staticmethod
+    def _split_metadata(md: Dict[str, Any]) -> Dict[str, Any]:
+        extra: Dict[str, Any] = {}
+        for key, value in (md or {}).items():
+            if key.startswith("meta_"):
+                extra[key[len("meta_"):]] = value
+        return extra
+
     def add_bullet(
         self,
         *,
@@ -141,6 +164,7 @@ class ProceduralMemoryStore:
         status: str = "quarantined",
         confidence: float = 0.5,
         source_trace_id: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
         bullet_id: Optional[str] = None,
     ) -> ProceduralBullet:
         """Add a new bullet as a single vector entry."""
@@ -168,6 +192,7 @@ class ProceduralMemoryStore:
             created_at=now,
             last_used_at="",
             source_trace_id=source_trace_id,
+            metadata=metadata or {},
         )
 
         emb = self._embed([b.text])[0]
@@ -250,6 +275,7 @@ class ProceduralMemoryStore:
                         created_at=md.get("created_at", ""),
                         last_used_at=md.get("last_used_at", ""),
                         source_trace_id=md.get("source_trace_id", ""),
+                        metadata=self._split_metadata(md),
                     )
                 )
 
@@ -303,6 +329,110 @@ class ProceduralMemoryStore:
         except Exception as e:
             logger.debug(f"procedural_memory touch failed: {e}")
 
+    def _fetch_by_id(self, bullet_id: str) -> Optional[Tuple[str, Dict[str, Any], str]]:
+        """Fetch metadata and document for a bullet id across collections."""
+        for side in ("left", "right", "shared"):
+            col = self._collections[side]
+            got = col.get(ids=[bullet_id], include=["metadatas", "documents"])
+            if not got.get("ids"):
+                continue
+            md = (got.get("metadatas") or [{}])[0] or {}
+            doc = (got.get("documents") or [""])[0]
+            return side, md, doc
+        return None
+
+    def get_bullets_by_ids(self, bullet_ids: List[str]) -> List[ProceduralBullet]:
+        """Fetch bullets by id across collections."""
+        bullets: List[ProceduralBullet] = []
+        for bullet_id in bullet_ids:
+            found = self._fetch_by_id(bullet_id)
+            if not found:
+                continue
+            side, md, doc = found
+            bullets.append(
+                ProceduralBullet(
+                    id=bullet_id,
+                    text=doc,
+                    side=side,
+                    type=md.get("type", "heuristic"),
+                    tags=[t for t in (md.get("tags") or "").split(",") if t],
+                    status=md.get("status", "active"),
+                    confidence=float(md.get("confidence", 0.5)),
+                    helpful_count=int(md.get("helpful_count", 0)),
+                    harmful_count=int(md.get("harmful_count", 0)),
+                    created_at=md.get("created_at", ""),
+                    last_used_at=md.get("last_used_at", ""),
+                    source_trace_id=md.get("source_trace_id", ""),
+                    metadata=self._split_metadata(md),
+                )
+            )
+        return bullets
+
+    def list_bullets(
+        self,
+        side: str,
+        limit: int = 1000,
+        include_deprecated: bool = False,
+    ) -> List[ProceduralBullet]:
+        """List bullets from a collection without semantic search."""
+        if side not in self._collections:
+            raise ValueError(f"Invalid side '{side}'")
+        col = self._collections[side]
+        where = {} if include_deprecated else {"status": {"$ne": "deprecated"}}
+        try:
+            res = col.get(include=["documents", "metadatas"], limit=limit, where=where)
+        except TypeError:
+            res = col.get(include=["documents", "metadatas"], limit=limit)
+        ids = res.get("ids", [])
+        docs = res.get("documents", [])
+        metas = res.get("metadatas", [])
+        bullets: List[ProceduralBullet] = []
+        for bullet_id, doc, md in zip(ids, docs, metas):
+            md = md or {}
+            bullets.append(
+                ProceduralBullet(
+                    id=bullet_id,
+                    text=doc,
+                    side=side,
+                    type=md.get("type", "heuristic"),
+                    tags=[t for t in (md.get("tags") or "").split(",") if t],
+                    status=md.get("status", "active"),
+                    confidence=float(md.get("confidence", 0.5)),
+                    helpful_count=int(md.get("helpful_count", 0)),
+                    harmful_count=int(md.get("harmful_count", 0)),
+                    created_at=md.get("created_at", ""),
+                    last_used_at=md.get("last_used_at", ""),
+                    source_trace_id=md.get("source_trace_id", ""),
+                    metadata=self._split_metadata(md),
+                )
+            )
+        return bullets
+
+    def update_metadata(self, bullet_id: str, updates: Dict[str, Any]) -> bool:
+        """Update metadata keys for an existing bullet."""
+        found = self._fetch_by_id(bullet_id)
+        if not found:
+            return False
+        side, md, doc = found
+        for key, value in (updates or {}).items():
+            meta_key = f"meta_{key}"
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                md[meta_key] = value
+            else:
+                md[meta_key] = str(value)
+        self._collections[side].upsert(ids=[bullet_id], documents=[doc], metadatas=[md])
+        return True
+
+    def set_status(self, bullet_id: str, status: str) -> bool:
+        """Update lifecycle status for a bullet."""
+        found = self._fetch_by_id(bullet_id)
+        if not found:
+            return False
+        side, md, doc = found
+        md["status"] = status
+        self._collections[side].upsert(ids=[bullet_id], documents=[doc], metadatas=[md])
+        return True
+
     def record_outcome(self, bullet_ids: List[str], *, helpful: bool) -> None:
         """Increment helpful/harmful counters for bullets that were actually used.
 
@@ -315,41 +445,41 @@ class ProceduralMemoryStore:
             self._increment(bid, helpful=helpful)
 
     def _increment(self, bullet_id: str, *, helpful: bool) -> None:
-        # Bullet IDs include side prefix but we still need to locate which collection.
-        for side in ("left", "right", "shared"):
-            col = self._collections[side]
-            got = col.get(ids=[bullet_id], include=["metadatas", "documents"])
-            if not got.get("ids"):
-                continue
-            md = (got.get("metadatas") or [{}])[0] or {}
-            doc = (got.get("documents") or [""])[0]
-
-            if helpful:
-                md["helpful_count"] = int(md.get("helpful_count", 0)) + 1
-            else:
-                md["harmful_count"] = int(md.get("harmful_count", 0)) + 1
-
-            # Auto-promote from quarantined to active when confirmed
-            status = md.get("status", "active")
-            if status == "quarantined" and int(md.get("helpful_count", 0)) >= self.quarantine_threshold and int(md.get("harmful_count", 0)) == 0:
-                md["status"] = "active"
-
-            col.upsert(ids=[bullet_id], documents=[doc], metadatas=[md])
-
-            # Consider promotion to shared if coming from left/right and policy allows
-            if side in ("left", "right"):
-                self._maybe_promote_to_shared(side, doc, md)
+        found = self._fetch_by_id(bullet_id)
+        if not found:
             return
+        side, md, doc = found
+
+        if helpful:
+            md["helpful_count"] = int(md.get("helpful_count", 0)) + 1
+        else:
+            md["harmful_count"] = int(md.get("harmful_count", 0)) + 1
+
+        # Auto-promote from quarantined to active when confirmed
+        status = md.get("status", "active")
+        if status == "quarantined" and int(md.get("helpful_count", 0)) >= self.quarantine_threshold and int(md.get("harmful_count", 0)) == 0:
+            md["status"] = "active"
+
+        self._collections[side].upsert(ids=[bullet_id], documents=[doc], metadatas=[md])
+
+        # Consider promotion to shared if coming from left/right and policy allows
+        if side in ("left", "right"):
+            self._maybe_promote_to_shared(side, doc, md)
+        return
 
     def _maybe_promote_to_shared(self, origin_side: str, doc: str, md: Dict[str, Any]) -> None:
-        if self.cross_teaching not in ("shared_only", "suggestions"):
+        if self.cross_teaching not in ("shared_only", "suggestions", "teaching"):
             return
         if int(md.get("helpful_count", 0)) < self.promote_threshold:
             return
-        if int(md.get("harmful_count", 0)) > 0:
+        if int(md.get("harmful_count", 0)) > self.harmful_tolerance:
             return
         if md.get("status") != "active":
             return
+        if self.require_cross_confirmation and not md.get("meta_cross_confirmed"):
+            return
+
+        translated = self._maybe_translate_on_promote(doc, md)
 
         # Upsert into shared collection (id stable but namespaced)
         shared_id = f"shared__{md.get('id', '')}"
@@ -362,10 +492,39 @@ class ProceduralMemoryStore:
         shared_md["confidence"] = max(float(shared_md.get("confidence", 0.5)), 0.8)
         shared_md["status"] = "active"
 
-        emb = self._embed([doc])[0]
+        emb = self._embed([translated])[0]
         self._collections["shared"].upsert(
             ids=[shared_id],
-            documents=[doc],
+            documents=[translated],
             embeddings=[emb],
             metadatas=[shared_md],
         )
+    def _maybe_translate_on_promote(self, text: str, md: Dict[str, Any]) -> str:
+        """Optionally neutralize directive-heavy phrasing for shared memory."""
+        if not self.translate_on_promote:
+            return text
+
+        import re
+
+        original = text
+        rules = [
+            (r"\bmust not\b", "avoid"),
+            (r"\bdo not\b", "avoid"),
+            (r"\bnever\b", "avoid"),
+            (r"\bmust\b", "should"),
+            (r"\balways\b", "usually"),
+            (r"\brequired\b", "recommended"),
+        ]
+
+        updated = text
+        for pattern, replacement in rules:
+            updated = re.sub(pattern, replacement, updated, flags=re.IGNORECASE)
+
+        if updated != text:
+            md.setdefault("meta_origin_text", original)
+
+        return updated
+
+
+# Backward compatibility alias for older maintenance modules
+ProceduralStore = ProceduralMemoryStore

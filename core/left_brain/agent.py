@@ -2,7 +2,7 @@
 from core.base_agent import BrainAgent, Message, MessageType
 from typing import Dict, Any, List
 import asyncio
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 
 class LeftBrain(BrainAgent):

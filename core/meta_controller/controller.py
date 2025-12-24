@@ -1,10 +1,12 @@
 """Meta Controller: Consciousness Tick System"""
 import asyncio
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
 from loguru import logger
+
+from .exploration_policy import ExplorationPolicy
 
 
 class CognitiveMode(Enum):
@@ -24,6 +26,8 @@ class TickMetrics:
     novelty: float
     decision: str
     mode: CognitiveMode
+    forced_exploration: bool = False
+    forced_reason: str = ""
 
 
 class MetaController:
@@ -38,7 +42,14 @@ class MetaController:
     - Meta-awareness: "What am I doing? Should I switch?"
     """
     
-    def __init__(self, config: Dict[str, Any], left_brain, right_brain):
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        left_brain,
+        right_brain,
+        suggestion_handler: Optional[Callable[[Dict[str, Any]], None]] = None,
+        exploration_policy: Optional[ExplorationPolicy] = None,
+    ):
         self.config = config.get("bicameral", {})
         self.left = left_brain
         self.right = right_brain
@@ -53,6 +64,11 @@ class MetaController:
         self.mode = CognitiveMode.IDLE
         self.tick_history = []
         self.running = False
+
+        self.suggestion_handler = suggestion_handler
+        self.exploration_policy = exploration_policy or ExplorationPolicy(config)
+        self._lead_history: list = []
+        self._forced_exploration_count = 0
         
         self._tick_count = 0
         self._last_tick = time.time()
@@ -85,7 +101,7 @@ class MetaController:
         metrics = self._calculate_metrics(left_state, right_state)
         
         # Decide on mode
-        decision = self._decide_mode(metrics)
+        decision, forced, forced_reason = self._decide_mode(metrics)
         
         # Record tick
         tick = TickMetrics(
@@ -95,10 +111,13 @@ class MetaController:
             conflict=metrics["conflict"],
             novelty=metrics["novelty"],
             decision=decision,
-            mode=self.mode
+            mode=self.mode,
+            forced_exploration=forced,
+            forced_reason=forced_reason
         )
-        
+
         self.tick_history.append(tick)
+        self._lead_history.append(self._lead_from_mode(self.mode))
         
         # Log if significant
         if self._is_significant_tick(metrics):
@@ -106,6 +125,19 @@ class MetaController:
         
         self._last_tick = current_time
         
+        if self.suggestion_handler:
+            tick_profile = {
+                "is_idle": self.mode == CognitiveMode.IDLE,
+                "pressure": metrics["entropy"],
+                "novelty": metrics["novelty"],
+                "conflict": metrics["conflict"],
+                "entropy": metrics["entropy"],
+            }
+            try:
+                self.suggestion_handler(tick_profile)
+            except Exception:
+                logger.debug("Suggestion handler failed")
+
         return tick
     
     def _calculate_metrics(self, left: Dict[str, float], right: Dict[str, float]) -> Dict[str, float]:
@@ -132,7 +164,7 @@ class MetaController:
             "right_conf": right["confidence"]
         }
     
-    def _decide_mode(self, metrics: Dict[str, float]) -> str:
+    def _decide_mode(self, metrics: Dict[str, float]) -> tuple:
         """Decide which cognitive mode to enter based on metrics"""
         
         conflict = metrics["conflict"]
@@ -141,33 +173,72 @@ class MetaController:
         
         previous_mode = self.mode
         
+        forced = False
+        forced_reason = ""
+
         # Decision logic
         if entropy > self.thresholds["entropy"]:
             # High uncertainty - need exploration
             self.mode = CognitiveMode.EXPLORE
-            decision = "HIGH_ENTROPY → EXPLORE"
+            decision = "HIGH_ENTROPY -> EXPLORE"
         
         elif novelty > self.thresholds["novelty"]:
             # High novelty - explore anomalies
             self.mode = CognitiveMode.EXPLORE
-            decision = "HIGH_NOVELTY → EXPLORE"
+            decision = "HIGH_NOVELTY -> EXPLORE"
         
         elif conflict > self.thresholds["conflict"]:
             # Conflict between brains - integrate
             self.mode = CognitiveMode.INTEGRATE
-            decision = "CONFLICT → INTEGRATE"
+            decision = "CONFLICT -> INTEGRATE"
         
         else:
             # Low uncertainty - exploit known patterns
             self.mode = CognitiveMode.EXPLOIT
-            decision = "STABLE → EXPLOIT"
+            decision = "STABLE -> EXPLOIT"
+
+        # Forced exploration policy override
+        if self.exploration_policy and self.exploration_policy.enabled:
+            tick_profile = {
+                "pressure": entropy,
+                "novelty": novelty,
+                "conflict": conflict,
+            }
+            policy_decision = self.exploration_policy.evaluate(
+                tick_profile=tick_profile,
+                history=self._lead_history,
+                divergence=None,
+                tick_count=self._tick_count,
+                task_risk=None,
+            )
+            if policy_decision.force_right_lead:
+                self.mode = CognitiveMode.EXPLORE
+                decision = f"FORCED_EXPLORATION ({policy_decision.reason})"
+                forced = True
+                forced_reason = policy_decision.reason
+                self._forced_exploration_count += 1
+            elif policy_decision.force_right_critic:
+                self.mode = CognitiveMode.INTEGRATE
+                decision = f"FORCED_RIGHT_CRITIC ({policy_decision.reason})"
+                forced = True
+                forced_reason = policy_decision.reason
         
         # Track mode switches
         if previous_mode != self.mode:
             self._last_mode_switch = time.time()
             logger.info(f"🔄 Mode Switch: {previous_mode.value} → {self.mode.value}")
         
-        return decision
+        return decision, forced, forced_reason
+
+    @staticmethod
+    def _lead_from_mode(mode: CognitiveMode) -> str:
+        if mode == CognitiveMode.EXPLORE:
+            return "right_lead"
+        if mode == CognitiveMode.EXPLOIT:
+            return "left_lead"
+        if mode == CognitiveMode.INTEGRATE:
+            return "both"
+        return "idle"
     
     def _is_significant_tick(self, metrics: Dict[str, float]) -> bool:
         """Check if this tick represents a significant state change"""
@@ -219,5 +290,6 @@ class MetaController:
             "tick_rate": self.get_tick_rate(),
             "active_hemisphere": self.get_active_hemisphere(),
             "time_since_last_switch": time.time() - self._last_mode_switch,
-            "recent_ticks": len([t for t in self.tick_history if time.time() - t.timestamp < 5.0])
+            "recent_ticks": len([t for t in self.tick_history if time.time() - t.timestamp < 5.0]),
+            "forced_exploration_count": self._forced_exploration_count,
         }

@@ -1,4 +1,4 @@
-## Phase 5: Cross-Hemisphere Learning — Implementation Guide
+## Phase 6: Cross-Hemisphere Learning — Implementation Guide
 
 **Last Updated:** December 24, 2025
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Phase 5 implements **controlled cross-hemisphere teaching** while preserving bicameral separation. The left and right hemispheres primarily learn independently, but can **suggest**, **teach**, and **promote** procedural knowledge through a filtered channel that prevents contamination and convergence.
+Phase 6 implements **controlled cross-hemisphere teaching** while preserving bicameral separation. The left and right hemispheres primarily learn independently, but can **suggest**, **teach**, and **promote** procedural knowledge through a filtered channel that prevents contamination and convergence.
 
 **Key Insight:** Cross-teaching improves capability *only if it’s gated*. Unfiltered sharing collapses diversity and turns two hemispheres into one bland agent.
 
@@ -352,7 +352,7 @@ def can_promote_to_shared(bullet, config) -> bool:
 
 ## 7. Diversity Preservation & Drift Monitoring
 
-**Purpose:** Ensure Phase 5 doesn’t destroy the bicameral effect
+**Purpose:** Ensure Phase 6 doesn’t destroy the bicameral effect
 
 **Implementation:** `core/memory/diversity_metrics.py` (new)
 
@@ -376,21 +376,18 @@ def can_promote_to_shared(bullet, config) -> bool:
 
 ## Configuration
 
-Add to `config/config.yaml` under `memory:` (recommended placement)
+Add to `config/config.yaml` under `procedural_memory:` (preferred). The loader also
+accepts `memory.cross_hemisphere` for backward compatibility.
 
 ```yaml
-memory:
-  short_term_capacity: 20
-  long_term_persistence: true
-  consolidation_threshold: 10
-
-  # Phase 5: Cross-Hemisphere Learning
+procedural_memory:
+  # Phase 6: Cross-Hemisphere Learning
   cross_hemisphere:
     mode: "shared_only"              # shared_only | suggestions | teaching
     enabled: true
 
     suggestions:
-      enabled: false                 # default OFF until Phase 5 is implemented
+      enabled: false                 # default OFF until Phase 6 is implemented
       suggest_threshold: 2
       min_suggest_confidence: 0.65
       deliver_when_idle: true
@@ -426,7 +423,7 @@ from core.memory.suggestion_store import SuggestionStore
 from core.memory.curator import Curator
 
 store = SuggestionStore("./data/memory/suggestions.jsonl")
-curator = Curator(config, store)
+curator = Curator(memory, suggestion_store=store, config=config)
 
 # Curator emits suggestions (does NOT write to other hemisphere directly)
 suggestions = curator.generate_suggestions(bullets_recently_successful)
@@ -434,7 +431,7 @@ suggestions = curator.generate_suggestions(bullets_recently_successful)
 # Meta-controller delivers suggestions only under safe tick conditions
 if can_deliver_suggestions(tick_profile, config):
     pending = store.list_pending(to_side="right")
-    for s in pending[:config.memory.cross_hemisphere.suggestions.deliver_budget_per_tick]:
+    for s in pending[:config.procedural_memory.cross_hemisphere.suggestions.deliver_budget_per_tick]:
         apply_suggestion_to_hemisphere(memory_store, s)
         store.mark_delivered(s.suggestion_id)
 ```
@@ -503,16 +500,12 @@ if conflicts:
 
 ### Unit Tests
 
-* `tests/test_suggestion_store.py`
-* `tests/test_suggestion_delivery.py`
-* `tests/test_teaching_api.py`
-* `tests/test_conflict_detector.py`
-* `tests/test_shared_promotion_phase5.py`
-* `tests/test_diversity_metrics.py`
+* `test_phase6_cross_hemisphere_learning.py`
+* `test_phase6_forced_exploration.py`
 
 ### Integration Tests
 
-* `test_phase5_cross_hemisphere_learning.py`
+* `test_phase6_cross_hemisphere_learning.py`
 
 Tests should cover:
 
@@ -558,30 +551,35 @@ Tests should cover:
 
 ### Created
 
-* `core/memory/suggestion_store.py` — suggestion lifecycle + persistence
-* `core/memory/teaching.py` — explicit teaching API
-* `core/memory/conflict_detector.py` — contradiction detection + policy
-* `core/memory/diversity_metrics.py` — convergence monitoring + drift signals
-* `docs/PHASE5_CROSS_HEMISPHERE_LEARNING.md` — this document
-* `tests/test_suggestion_store.py`
-* `tests/test_conflict_detector.py`
-* `tests/test_teaching_api.py`
-* `test_phase5_cross_hemisphere_learning.py`
+* `core/memory/suggestion_store.py` - suggestion lifecycle + persistence
+* `core/memory/suggestion_delivery.py` - tick-gated delivery
+* `core/memory/teaching.py` - explicit teaching API
+* `core/memory/conflict_detector.py` - contradiction detection + policy
+* `core/memory/diversity_metrics.py` - convergence monitoring + drift signals
+* `core/memory/config_utils.py` - cross-hemisphere config merge helpers
+* `core/meta_controller/exploration_policy.py` - forced exploration policy
+* `docs/PHASE6` - this document
+* `test_phase6_cross_hemisphere_learning.py`
+* `test_phase6_forced_exploration.py`
 
 ### Modified
 
-* `core/memory/curator.py` — suggestion generation hook
-* `core/memory/procedural_store.py` — shared promotion gates + metadata
-* `core/memory/learning_pipeline.py` — integrate suggestion resolution signals
-* `config/config.yaml` — Phase 5 configuration section
-* `core/memory/__init__.py` — export new components
+* `core/memory/curator.py` - suggestion generation hook
+* `core/memory/procedural_store.py` - shared promotion gates + metadata
+* `core/memory/procedural_memory.py` - metadata plumbing and helpers
+* `core/memory/bullet.py` - metadata fields for suggestions
+* `core/memory/learning_pipeline.py` - suggestion generation/delivery hooks
+* `core/memory/__init__.py` - export new components
+* `core/meta_controller/controller.py` - forced exploration + delivery hook
+* `core/meta_controller/__init__.py` - export exploration policy
+* `config/config.yaml` - Phase 6 configuration section
 
 ---
-Got it — here’s the **Phase 5 addendum** that makes **“Forced exploration periods”** explicit, *without changing the plan’s structure*. This slots into the Phase 5 guide as a dedicated component + config + tests.
+Got it — here’s the **Phase 6 addendum** that makes **“Forced exploration periods”** explicit, *without changing the plan’s structure*. This slots into the Phase 6 guide as a dedicated component + config + tests.
 
 ---
 
-## Phase 5 Addendum: Forced Exploration Periods (Meta-Controller Policy)
+## Phase 6 Addendum: Forced Exploration Periods (Meta-Controller Policy)
 
 ### Overview
 
@@ -688,10 +686,10 @@ def stuck_in_same_side(history, config) -> bool:
 
 ## Configuration
 
-Add to `config/config.yaml` under Phase 5:
+Add to `config/config.yaml` under `procedural_memory.cross_hemisphere`:
 
 ```yaml
-memory:
+procedural_memory:
   cross_hemisphere:
     diversity:
       enabled: true
@@ -763,13 +761,11 @@ This feeds:
 
 ### Unit Tests
 
-* `tests/test_exploration_policy_quota.py`
-* `tests/test_exploration_policy_drift.py`
-* `tests/test_exploration_policy_stuck.py`
+* `test_phase6_forced_exploration.py`
 
 ### Integration Test
 
-* `test_phase5_forced_exploration.py`
+* `test_phase6_forced_exploration.py`
 
 Assertions:
 
@@ -789,4 +785,4 @@ Assertions:
 
 ---
 
-If you want, I can also fold this into the Phase 5 guide section order cleanly (as “Component 8”) so it stays consistent with the rest of the plan.
+If you want, I can also fold this into the Phase 6 guide section order cleanly (as “Component 8”) so it stays consistent with the rest of the plan.

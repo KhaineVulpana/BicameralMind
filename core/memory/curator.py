@@ -21,6 +21,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from loguru import logger
 
 from .bullet import Bullet, BulletType, BulletStatus, Hemisphere
+from .suggestion_store import Suggestion, SuggestionStore, _now_iso, _make_id
 from .procedural_memory import ProceduralMemory
 from .reflector import ReflectionInsight, InsightType
 
@@ -35,13 +36,20 @@ class Curator:
     It ensures quality control and prevents memory pollution.
     """
 
-    def __init__(self, memory: ProceduralMemory):
+    def __init__(
+        self,
+        memory: ProceduralMemory,
+        suggestion_store: Optional[SuggestionStore] = None,
+        config: Optional[Dict[str, Any]] = None,
+    ):
         """Initialize curator.
 
         Args:
             memory: ProceduralMemory instance to manage
         """
         self.memory = memory
+        self.suggestion_store = suggestion_store
+        self.config = config or memory.get_cross_hemisphere_config()
 
     async def curate(
         self,
@@ -215,6 +223,108 @@ class Curator:
         union = len(t1 | t2)
 
         return intersection / union if union > 0 else 0.0
+
+    def _suggestion_config(self) -> Dict[str, Any]:
+        cross_cfg = self.config or self.memory.get_cross_hemisphere_config()
+        return cross_cfg.get("suggestions", {}) if cross_cfg else {}
+
+    def _suggestions_enabled(self) -> bool:
+        cross_cfg = self.config or self.memory.get_cross_hemisphere_config()
+        if not cross_cfg or not cross_cfg.get("enabled", False):
+            return False
+        mode = cross_cfg.get("mode", "shared_only")
+        if mode not in ("suggestions", "teaching"):
+            return False
+        return bool(self._suggestion_config().get("enabled", False))
+
+    def _should_suggest(self, bullet: Bullet, config: Dict[str, Any]) -> bool:
+        if bullet.status != BulletStatus.ACTIVE:
+            return False
+        if bullet.helpful_count < int(config.get("suggest_threshold", 2)):
+            return False
+        if bullet.harmful_count > int(config.get("harmful_tolerance", 0)):
+            return False
+        if bullet.confidence < float(config.get("min_suggest_confidence", 0.65)):
+            return False
+        return True
+
+    def _has_equivalent_in_side(self, text: str, hemisphere: Hemisphere) -> bool:
+        candidates, _ = self.memory.retrieve(
+            query=text,
+            side=hemisphere,
+            k=5,
+            include_shared=False,
+        )
+        for candidate in candidates:
+            if self._text_similarity(candidate.text, text) > 0.9:
+                return True
+        return False
+
+    def _already_in_shared(self, text: str) -> bool:
+        candidates, _ = self.memory.retrieve(
+            query=text,
+            side=Hemisphere.LEFT,
+            k=5,
+            include_shared=True,
+        )
+        for candidate in candidates:
+            if candidate.side == Hemisphere.SHARED and self._text_similarity(candidate.text, text) > 0.9:
+                return True
+        return False
+
+    def generate_suggestions(
+        self,
+        bullets: List[Bullet],
+        from_side: Hemisphere,
+        to_side: Optional[Hemisphere] = None,
+        reason: str = "suggested_from_outcome",
+    ) -> List[Suggestion]:
+        """Generate cross-hemisphere suggestions for eligible bullets."""
+        if not self.suggestion_store or not self._suggestions_enabled():
+            return []
+
+        config = self._suggestion_config()
+        max_pending = int(config.get("max_pending", 0))
+        if max_pending and self.suggestion_store.count(status="pending") >= max_pending:
+            return []
+        target = to_side or (Hemisphere.RIGHT if from_side == Hemisphere.LEFT else Hemisphere.LEFT)
+        suggestions: List[Suggestion] = []
+
+        for bullet in bullets:
+            if max_pending and self.suggestion_store.count(status="pending") >= max_pending:
+                break
+            if bullet.side == Hemisphere.SHARED:
+                continue
+            if not self._should_suggest(bullet, config):
+                continue
+            if self._already_in_shared(bullet.text):
+                continue
+            if self._has_equivalent_in_side(bullet.text, target):
+                continue
+            if self.suggestion_store.exists_active(bullet.id, target.value):
+                continue
+
+            suggestion = Suggestion(
+                suggestion_id=_make_id("sg"),
+                from_side=from_side.value,
+                to_side=target.value,
+                origin_bullet_id=bullet.id,
+                suggested_text=bullet.text,
+                tags=bullet.tags,
+                reason=reason,
+                status="pending",
+                created_at=_now_iso(),
+                delivered_at=None,
+                resolved_at=None,
+                trace_ids=[],
+            )
+            try:
+                self.suggestion_store.create(suggestion)
+                suggestions.append(suggestion)
+            except ValueError:
+                continue
+
+        return suggestions
 
     async def prune_low_quality(
         self,

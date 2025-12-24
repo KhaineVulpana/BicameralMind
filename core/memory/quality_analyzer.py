@@ -1,6 +1,6 @@
 """Quality Analyzer - Identifies low-quality bullets for pruning"""
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum

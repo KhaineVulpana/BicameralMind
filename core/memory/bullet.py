@@ -78,6 +78,7 @@ class Bullet:
 
     # Traceability
     source_trace_id: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
     @staticmethod
     def generate_id(side: Hemisphere) -> str:
@@ -122,11 +123,12 @@ class Bullet:
             "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
             "last_used_at": self.last_used_at.isoformat() if isinstance(self.last_used_at, datetime) and self.last_used_at else "",
             "source_trace_id": self.source_trace_id,
+            "metadata": self.metadata or {},
         }
 
     def to_metadata(self) -> Dict[str, Any]:
         """Convert to metadata dict for vector store (Chroma-compatible)."""
-        return {
+        data = {
             "id": self.id,
             "side": self.side.value if isinstance(self.side, Hemisphere) else self.side,
             "type": self.type.value if isinstance(self.type, BulletType) else self.type,
@@ -139,6 +141,13 @@ class Bullet:
             "last_used_at": self.last_used_at.isoformat() if isinstance(self.last_used_at, datetime) and self.last_used_at else "",
             "source_trace_id": self.source_trace_id,
         }
+        for key, value in (self.metadata or {}).items():
+            meta_key = f"meta_{key}"
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                data[meta_key] = value
+            else:
+                data[meta_key] = str(value)
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Bullet":
@@ -172,6 +181,11 @@ class Bullet:
         if isinstance(tags, str):
             tags = [t.strip() for t in tags.split(",") if t.strip()]
 
+        metadata = data.get("metadata", {}) or {}
+        for key, value in data.items():
+            if key.startswith("meta_"):
+                metadata[key[len("meta_"):]] = value
+
         return cls(
             id=data["id"],
             text=data["text"],
@@ -185,6 +199,7 @@ class Bullet:
             created_at=created_at,
             last_used_at=last_used_at,
             source_trace_id=data.get("source_trace_id", ""),
+            metadata=metadata,
         )
 
     def score(self) -> float:

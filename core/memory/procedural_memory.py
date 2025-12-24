@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from loguru import logger
 
 from .bullet import Bullet, BulletType, BulletStatus, Hemisphere
+from .config_utils import get_cross_hemisphere_config
 from .procedural_store import ProceduralMemoryStore, ProceduralBullet
 
 
@@ -27,6 +28,7 @@ class ProceduralMemory:
 
     def __init__(self, config: Dict[str, Any]):
         """Initialize procedural memory system."""
+        self.config = config or {}
         self.store = ProceduralMemoryStore(config)
         self.enabled = self.store.enabled
 
@@ -46,6 +48,7 @@ class ProceduralMemory:
         confidence: float = 0.5,
         source_trace_id: str = "",
         status: BulletStatus = BulletStatus.QUARANTINED,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Bullet:
         """Add a new procedural bullet.
 
@@ -64,6 +67,8 @@ class ProceduralMemory:
             confidence=confidence,
             source_trace_id=source_trace_id,
         )
+        if metadata:
+            bullet.metadata = metadata
         bullet.status = status
 
         # Store in vector DB
@@ -75,6 +80,7 @@ class ProceduralMemory:
             status=status.value,
             confidence=confidence,
             source_trace_id=source_trace_id,
+            metadata=metadata,
             bullet_id=bullet.id,
         )
 
@@ -177,8 +183,32 @@ class ProceduralMemory:
                 "created_at": old_bullet.created_at,
                 "last_used_at": old_bullet.last_used_at,
                 "source_trace_id": old_bullet.source_trace_id,
+                "metadata": old_bullet.metadata or {},
             }
         )
+
+    def get_cross_hemisphere_config(self) -> Dict[str, Any]:
+        """Return merged cross-hemisphere config."""
+        return get_cross_hemisphere_config(self.config)
+
+    def get_bullets_by_ids(self, bullet_ids: List[str]) -> List[Bullet]:
+        """Fetch bullets by ids across collections."""
+        if not self.enabled or not bullet_ids:
+            return []
+        bullets = self.store.get_bullets_by_ids(bullet_ids)
+        return [self._convert_bullet(b) for b in bullets]
+
+    def update_bullet_metadata(self, bullet_id: str, updates: Dict[str, Any]) -> bool:
+        """Update metadata for a stored bullet."""
+        if not self.enabled:
+            return False
+        return self.store.update_metadata(bullet_id, updates)
+
+    def set_bullet_status(self, bullet_id: str, status: BulletStatus) -> bool:
+        """Update status for a stored bullet."""
+        if not self.enabled:
+            return False
+        return self.store.set_status(bullet_id, status.value)
 
     def format_bullets_for_prompt(
         self,

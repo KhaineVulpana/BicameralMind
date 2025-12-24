@@ -14,6 +14,11 @@ from .retrieval import MemoryRetriever
 from .reflector import Reflector, ExecutionTrace, ReflectionInsight, OutcomeType, InsightType
 from .curator import Curator
 from .learning_pipeline import LearningPipeline, LearningResult, create_trace
+from .suggestion_store import SuggestionStore, Suggestion
+from .suggestion_delivery import SuggestionDelivery, can_deliver_suggestions
+from .teaching import TeachingAPI
+from .conflict_detector import ConflictDetector
+from .diversity_metrics import DiversityMetrics
 
 # Phase 4: Maintenance
 from .deduplicator import Deduplicator, DuplicateCluster
@@ -45,6 +50,15 @@ __all__ = [
     'LearningResult',
     'OutcomeType',
     'InsightType',
+
+    # Phase 6: Cross-hemisphere learning
+    'SuggestionStore',
+    'Suggestion',
+    'SuggestionDelivery',
+    'can_deliver_suggestions',
+    'TeachingAPI',
+    'ConflictDetector',
+    'DiversityMetrics',
 
     # Maintenance (Phase 4)
     'Deduplicator',
