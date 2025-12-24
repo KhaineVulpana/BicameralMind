@@ -1,0 +1,82 @@
+model:
+  name: "llama3:8b"  # adjusted for local hardware  # Change to your preferred Ollama model
+  temperature: 0.7
+  max_tokens: 2048
+
+bicameral:
+  tick_interval: 0.5  # seconds between consciousness ticks
+  tick_threshold:
+    entropy: 0.6  # uncertainty threshold
+    conflict: 0.5  # inter-brain conflict threshold
+    novelty: 0.7  # pattern novelty threshold
+  
+  left_brain:
+    name: "PatternRecognition"
+    focus: "stability"
+    behaviors:
+      - "compress_patterns"
+      - "classify"
+      - "replicate_known"
+      - "validate_consistency"
+    
+  right_brain:
+    name: "PatternMutation"
+    focus: "exploration"
+    behaviors:
+      - "detect_anomalies"
+      - "mutate_patterns"
+      - "generate_variants"
+      - "explore_novel"
+
+rag:
+  enabled: true
+  chunk_size: 512
+  chunk_overlap: 50
+  top_k: 5
+  retrieval_mode: "agentic"  # agentic or single-pass
+  max_iterations: 5
+
+vector_store:
+  type: "chroma"  # chroma or faiss
+  persist_directory: "./data/vector_store"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+# Procedural memory is *not* factual RAG. It stores ACE-style "playbook" bullets
+# (strategies, tool rules, failure modes) as small, itemized entries.
+procedural_memory:
+  enabled: true
+  persist_directory: "./data/memory/procedural"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  # Cross-teaching policy:
+  # - shared_only: hemispheres primarily teach themselves; proven items promote to shared.
+  # - suggestions: (future) allow quarantine suggestions to the other hemisphere.
+  cross_teaching: "shared_only"
+  promote_threshold: 3
+  quarantine_threshold: 2
+  k_left: 8
+  k_right: 16
+  k_shared: 5
+
+mcp:
+  # Enable MCP to allow the bicameral mind to call external tools via the
+  # Model Context Protocol.  When ``enabled`` is true the system will
+  # attempt to connect to the servers listed below.  Each entry should
+  # include a ``name`` and connection parameters appropriate for your
+  # environment.  See ``integrations/mcp/mcp_integration.py`` for
+  # implementation details and examples.
+  enabled: true
+  servers:
+    - name: "hubspot"
+      type: "api"
+      # The endpoint value is a placeholder.  Configure this with the
+      # appropriate MCP server or API proxy that exposes your tools.
+      endpoint: ""  # e.g. "http://localhost:5000/mcp/hubspot"
+
+memory:
+  short_term_capacity: 20
+  long_term_persistence: true
+  consolidation_threshold: 10
+
+logging:
+  level: "INFO"
+  file: "./logs/bicameral_mind.log"

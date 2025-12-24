@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python examples/learning_pipeline_example.py:*)",
+      "Bash(python test_learning_simple.py:*)"
+    ]
+  }
+}
