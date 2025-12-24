@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BicameralMind - Testing UI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>BicameralMind Testing Interface</h1>
+            <div class="status-bar">
+                <span id="status">Status: LOADING...</span>
+                <span id="mode">Mode: -</span>
+                <span id="tick">Tick: -</span>
+            </div>
+        </div>
+
+        <!-- Three-column layout -->
+        <div class="main-content">
+            <!-- Left: Dashboard -->
+            <div class="panel dashboard">
+                <h2>System</h2>
+                <div class="metric">
+                    <label>Memory:</label>
+                    <div id="memory">L:- R:- S:-</div>
+                </div>
+                <div class="metric">
+                    <label>Mode:</label>
+                    <div id="mode-detail">-</div>
+                </div>
+                <div class="metric">
+                    <label>Active:</label>
+                    <div id="hemisphere">-</div>
+                </div>
+            </div>
+
+            <!-- Center: Chat -->
+            <div class="panel chat-panel">
+                <h2>Conversation</h2>
+                <div id="chat-messages" class="chat-messages">
+                    <div class="message system">
+                        <div class="text">BicameralMind ready. Type a message to begin.</div>
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="message-input" placeholder="Type your message..." autofocus>
+                    <button id="send-btn">Send</button>
+                </div>
+            </div>
+
+            <!-- Right: MCP Tools -->
+            <div class="panel mcp-panel">
+                <div class="panel-title-row">
+                    <h2>MCP Tools</h2>
+                    <button class="config-btn" onclick="openMCPConfig()" title="Configure MCP Servers">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8 3.5a.5.5 0 0 1 .5-.5h.5a.5.5 0 0 1 0 1h-.5a.5.5 0 0 1-.5-.5zm0 9a.5.5 0 0 1 .5-.5h.5a.5.5 0 0 1 0 1h-.5a.5.5 0 0 1-.5-.5z"/>
+                            <path d="M13.243 3.757a6 6 0 1 0 0 8.486l-.707-.707a5 5 0 1 1 0-7.072l.707-.707z"/>
+                            <path d="M10 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="mcp-servers">
+                    <div class="loading">Loading...</div>
+                </div>
+                <h3>Recent Executions</h3>
+                <div id="mcp-log">
+                    <div class="log-entry">No executions yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MCP Configuration Modal -->
+    <iframe src="/static/mcp-config.html" style="display:none" onload="document.body.appendChild(this.contentDocument.body.firstChild);this.remove()"></iframe>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

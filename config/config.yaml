@@ -63,12 +63,32 @@ mcp:
 
   # MCP Servers
   servers:
-    # Filesystem tools
+    # Filesystem tools (read/write files)
     - name: "filesystem"
       type: "stdio"
       command: "npx"
       args: ["-y", "@modelcontextprotocol/server-filesystem", "./data"]
       enabled: true
+      description: "Read/write files and directories"
+      category: "filesystem"
+
+    # PowerShell execution
+    - name: "powershell"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@executeautomation/powershell-mcp-server"]
+      enabled: false
+      description: "Execute PowerShell commands"
+      category: "system"
+
+    # Web browser control (Puppeteer)
+    - name: "puppeteer"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-puppeteer"]
+      enabled: false
+      description: "Control web browser, navigate pages"
+      category: "web"
 
     # GitHub integration
     - name: "github"
@@ -77,7 +97,9 @@ mcp:
       args: ["-y", "@modelcontextprotocol/server-github"]
       env:
         GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
-      enabled: false  # Requires GitHub token
+      enabled: false
+      description: "Manage repos, issues, PRs"
+      category: "development"
 
     # Web search (Brave)
     - name: "brave_search"
@@ -86,34 +108,92 @@ mcp:
       args: ["-y", "@modelcontextprotocol/server-brave-search"]
       env:
         BRAVE_API_KEY: "${BRAVE_API_KEY}"
-      enabled: false  # Requires Brave API key
+      enabled: false
+      description: "Search the web"
+      category: "web"
 
-    # Google Drive
-    - name: "gdrive"
+    # Sequential Thinking
+    - name: "sequential_thinking"
       type: "stdio"
       command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-gdrive"]
-      enabled: false  # Requires OAuth setup
+      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+      enabled: false
+      description: "Step-by-step reasoning"
+      category: "reasoning"
 
-    # Slack
-    - name: "slack"
+    # Memory/Notes
+    - name: "memory"
       type: "stdio"
       command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-slack"]
-      env:
-        SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
-      enabled: false  # Requires Slack token
-
-    # Custom API server (example)
-    - name: "custom_api"
-      type: "api"
-      endpoint: "http://localhost:5000/mcp"
-      enabled: false  # Configure endpoint as needed
+      args: ["-y", "@modelcontextprotocol/server-memory"]
+      enabled: false
+      description: "Persistent notes storage"
+      category: "utility"
 
 memory:
   short_term_capacity: 20
   long_term_persistence: true
   consolidation_threshold: 10
+
+# Procedural Memory Configuration (ACE-style)
+procedural_memory:
+  enabled: true
+  persist_directory: "./data/memory/procedural"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+  # Learning thresholds (Phase 1)
+  promote_threshold: 3  # Helpful count needed for shared promotion
+  quarantine_threshold: 2  # Helpful count to activate quarantined bullets
+
+  # Retrieval settings (Phase 1)
+  k_left: 8  # Left brain: fewer, higher-confidence bullets
+  k_right: 16  # Right brain: more, exploratory bullets
+  k_shared: 5  # Shared memory bullets per query
+
+  # Learning configuration (Phase 2)
+  learning:
+    reflection_enabled: true
+    auto_curate: true
+    min_insight_confidence: 0.5
+    deep_reflection_llm: true
+
+  # Maintenance configuration (Phase 4)
+  maintenance:
+    enabled: true
+
+    # Deduplication settings
+    deduplicate_enabled: true
+    dedup_threshold: 0.90  # Cosine similarity threshold (0.0-1.0)
+    dedup_schedule: "daily"  # daily, weekly, manual
+    dedup_scope: "per_hemisphere"  # per_hemisphere, cross_hemisphere, all
+    dedup_min_cluster_size: 2
+
+    # Pruning settings
+    prune_enabled: true
+    prune_policy: "balanced"  # aggressive, balanced, conservative
+    prune_schedule: "weekly"  # daily, weekly, monthly, manual
+
+    # Pruning thresholds (balanced policy)
+    prune_min_age_days: 14  # Minimum age before considering pruning
+    prune_harmful_ratio: 1.5  # harmful_count / helpful_count threshold
+    prune_quarantine_age_days: 30  # Max age for quarantined bullets
+    low_confidence_threshold: 0.2  # Very low confidence threshold
+
+    # Safety settings
+    backup_before_prune: true
+    backup_directory: "./data/memory/backups"
+    max_prune_per_run: 100  # Safety limit on bullets pruned per operation
+    require_confirmation_threshold: 50  # Require manual confirmation above this
+    keep_prune_history: true
+    prune_history_days: 90  # How long to keep prune history
+
+    # Performance settings
+    batch_size: 100  # Process bullets in batches
+    parallel_processing: false  # Parallel processing (experimental)
+
+# Novelty Detection (Phase 2.5)
+novelty_detection:
+  novelty_decay: 0.8  # Exponential moving average decay (0.0-1.0)
 
 logging:
   level: "INFO"

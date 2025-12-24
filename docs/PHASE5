@@ -1,0 +1,792 @@
+## Phase 5: Cross-Hemisphere Learning — Implementation Guide
+
+**Last Updated:** December 24, 2025
+
+---
+
+## Overview
+
+Phase 5 implements **controlled cross-hemisphere teaching** while preserving bicameral separation. The left and right hemispheres primarily learn independently, but can **suggest**, **teach**, and **promote** procedural knowledge through a filtered channel that prevents contamination and convergence.
+
+**Key Insight:** Cross-teaching improves capability *only if it’s gated*. Unfiltered sharing collapses diversity and turns two hemispheres into one bland agent.
+
+---
+
+## What This Phase Solves
+
+### Problems Without Cross-Hemisphere Learning
+
+* **No transfer:** A useful tool rule discovered by Left never reaches Right (and vice versa)
+* **Slow convergence:** Shared “muscle memory” takes too long to form
+* **Repeated mistakes:** One hemisphere repeats the other’s already-solved failure modes
+* **No controlled teaching:** Users can’t intentionally transfer knowledge across hemispheres
+* **Undetected contradictions:** Left and Right can accumulate procedural rules that conflict
+* **Loss of bicameral effect:** Naive sharing makes both sides behave the same
+
+### Goals
+
+* **Suggestion System:** Optional cross-hemisphere suggestions, quarantined by default
+* **Teaching Mode:** Explicit, intentional knowledge transfer (user-initiated or policy-initiated)
+* **Conflict Resolution:** Detect and manage contradictory procedures safely
+* **Shared Memory Optimization:** Promote only high-confidence, cross-validated procedures
+* **Diversity Preservation:** Prevent hemisphere collapse via metrics and policy limits
+* **Safety:** Never overwrite; always quarantine; always audit
+
+---
+
+## Architecture
+
+### Cross-Hemisphere Learning Pipeline
+
+```
+|
++-- Suggestion Generation (Curator)
+|   |
+|   +-- Identify candidate bullets
+|   |   - Helpful trend
+|   |   - Cross-domain tags
+|   |   - Not yet shared-worthy
+|   |
+|   +-- Create Suggestion Record
+|       - from_side → to_side
+|       - origin bullet id
+|       - reason + tags
+|       - status: pending
+|
++-- Suggestion Delivery (Meta-Controller Tick)
+|   |
+|   +-- Delivery Gate
+|   |   - only when idle / low pressure (default)
+|   |   - delivery budget per tick/session
+|   |
+|   +-- Apply Suggestion
+|       - create receiving-side bullet (QUARANTINED)
+|       - attach origin metadata
+|
++-- Validation & Scoring (Outcomes, not ticks)
+|   |
+|   +-- Receiving hemisphere uses quarantined bullet
+|   +-- Outcomes update helpful/harmful
+|   +-- Quarantine promotion rules apply
+|
++-- Conflict Resolution
+|   |
+|   +-- Detect contradictory bullets
+|   +-- Quarantine newcomers
+|   +-- Optional conditional merge
+|
++-- Shared Memory Optimization
+|   |
+|   +-- Promotion gates
+|   |   - helpful threshold
+|   |   - low harmful
+|   |   - optional: cross-confirmed by both hemispheres
+|   |
+|   +-- Translate on promote (side-neutral wording)
+|
++-- Diversity Preservation
+    |
+    +-- Similarity drift metrics
+    +-- Suggestion throttling if convergence detected
+    +-- Retrieval diversity guardrails (Right stays exploratory)
+```
+
+---
+
+## Components
+
+## 1. Suggestion Store
+
+**Purpose:** Represent cross-hemisphere teaching as explicit, auditable objects (not implicit copying)
+
+**Implementation:** `core/memory/suggestion_store.py`
+
+**Key Features**
+
+* Stores suggestion lifecycle: `pending → delivered → accepted/rejected/expired`
+* Immutable origin tracking (prevents “who taught who?” ambiguity)
+* Supports throttled delivery
+* Supports manual teaching mode (high-priority suggestions)
+
+**Suggestion Schema**
+
+```python
+@dataclass
+class Suggestion:
+    suggestion_id: str
+    from_side: str              # "left" | "right"
+    to_side: str                # "left" | "right"
+    origin_bullet_id: str
+    suggested_text: str
+    tags: list[str]
+    reason: str
+    status: str                 # "pending" | "delivered" | "accepted" | "rejected" | "expired"
+    created_at: str
+    delivered_at: str | None
+    resolved_at: str | None
+    trace_ids: list[str]        # evidence links
+```
+
+**Core API**
+
+```python
+class SuggestionStore:
+    def create(self, suggestion: Suggestion) -> str: ...
+    def list_pending(self, to_side: str | None = None) -> list[Suggestion]: ...
+    def mark_delivered(self, suggestion_id: str) -> None: ...
+    def resolve(self, suggestion_id: str, accepted: bool, reason: str = "") -> None: ...
+    def expire_old(self, max_age_days: int) -> int: ...
+```
+
+---
+
+## 2. Suggestion Generator (Curator Extension)
+
+**Purpose:** Let Curator *propose* cross-teaching without directly modifying the other hemisphere
+
+**Implementation:** extend `core/memory/curator.py`
+
+**Criteria**
+
+* Candidate bullet must be:
+
+  * `status == "active"`
+  * `helpful_count >= suggest_threshold`
+  * `harmful_count == 0` (or below small tolerance)
+  * tag overlap indicates cross-hemisphere relevance (e.g., `mcp`, `tooling`, `schema`, `rag`)
+* Candidate must **not** already be in shared memory
+* Candidate must not already have an active equivalent in receiving hemisphere
+
+**Algorithm**
+
+```python
+def should_suggest(bullet, config) -> bool:
+    if bullet.status != "active":
+        return False
+    if bullet.helpful_count < config.suggest_threshold:
+        return False
+    if bullet.harmful_count > 0:
+        return False
+    if bullet.confidence < config.min_suggest_confidence:
+        return False
+    return True
+```
+
+**Suggestion Creation**
+
+```python
+def create_suggestion(from_side, to_side, bullet, reason) -> Suggestion:
+    return Suggestion(
+        suggestion_id=make_id("sg"),
+        from_side=from_side,
+        to_side=to_side,
+        origin_bullet_id=bullet.id,
+        suggested_text=bullet.text,
+        tags=bullet.tags,
+        reason=reason,
+        status="pending",
+        created_at=now_iso(),
+        delivered_at=None,
+        resolved_at=None,
+        trace_ids=[],
+    )
+```
+
+---
+
+## 3. Suggestion Delivery (Meta-Controller Tick Hook)
+
+**Purpose:** Deliver suggestions only when it won’t destabilize active problem-solving
+
+**Implementation:** extend Meta-Controller tick loop (wherever ticks are coordinated) and/or `core/memory/learning_pipeline.py`
+
+**Key Principle**
+
+* **Ticks do not score bullets.**
+* Ticks only decide **when delivery/reflection is allowed.**
+
+**Delivery Gate**
+
+* Default: deliver only when system is **idle** or **low pressure**
+* Rate-limit per tick/session to avoid flooding the receiving hemisphere
+
+**Delivery Logic**
+
+```python
+def can_deliver_suggestions(tick_profile, config) -> bool:
+    if not config.suggestions.enabled:
+        return False
+    if config.suggestions.deliver_when_idle and not tick_profile.is_idle:
+        return False
+    if tick_profile.pressure > config.suggestions.max_pressure_to_deliver:
+        return False
+    return True
+```
+
+**Apply Suggestion (Quarantined Bullet)**
+
+```python
+def apply_suggestion_to_hemisphere(memory_store, suggestion):
+    # Create a quarantined bullet in the receiving hemisphere
+    new_bullet = Bullet(
+        id=make_id(f"pb_{suggestion.to_side}"),
+        side=suggestion.to_side,
+        text=suggestion.suggested_text,
+        tags=suggestion.tags,
+        status="quarantined",
+        confidence=0.5,
+        helpful_count=0,
+        harmful_count=0,
+        metadata={
+            "suggestion_id": suggestion.suggestion_id,
+            "origin_bullet_id": suggestion.origin_bullet_id,
+            "taught_from": suggestion.from_side,
+        }
+    )
+    memory_store.add_bullet(new_bullet, collection=f"procedural_{suggestion.to_side}")
+```
+
+---
+
+## 4. Teaching Mode (Explicit Transfer)
+
+**Purpose:** Allow intentional teaching without relying on emergent suggestion logic
+
+**Implementation:** `core/memory/teaching.py` (new)
+
+**Teaching Actions**
+
+* Teach existing bullet ID across hemispheres
+* Teach raw text as new quarantined bullet
+* Optional translation step (rewrite to match receiving hemisphere’s style contract)
+
+**API**
+
+```python
+class TeachingAPI:
+    def teach_bullet(self, from_side, to_side, bullet_id, translate: bool) -> str: ...
+    def teach_text(self, from_side, to_side, text, tags, translate: bool) -> str: ...
+```
+
+**Translation Strategy**
+
+* Conservative v1: minimal rewrite, preserve semantics
+* “Neutralize” hard directives when needed:
+
+  * left-style: strict checklist / must
+  * right-style: exploratory constraint / consider
+
+---
+
+## 5. Conflict Detector & Resolution
+
+**Purpose:** Prevent cross-teaching from introducing contradictory procedural rules
+
+**Implementation:** `core/memory/conflict_detector.py` (new)
+
+**Conflict Types**
+
+* Same domain/tags but opposite directives
+* “Must do X” vs “Never do X”
+* Two mutually exclusive tool schemas or action rules
+
+**Detection Heuristic (v1)**
+
+* High semantic similarity + polarity mismatch keyword scan
+
+```python
+POLARITY_NEG = {"never", "do not", "avoid", "must not"}
+POLARITY_POS = {"must", "always", "required"}
+
+def detect_conflict(a: Bullet, b: Bullet, sim: float) -> bool:
+    if sim < 0.88:
+        return False
+    a_neg = any(w in a.text.lower() for w in POLARITY_NEG)
+    b_neg = any(w in b.text.lower() for w in POLARITY_NEG)
+    a_pos = any(w in a.text.lower() for w in POLARITY_POS)
+    b_pos = any(w in b.text.lower() for w in POLARITY_POS)
+    return (a_neg and b_pos) or (a_pos and b_neg)
+```
+
+**Resolution Policies**
+
+* **Default (safe):** quarantine newcomer + attach `conflicts_with=[...]`
+* Optional later: create a conditional shared bullet:
+
+  * “If context A → use rule X, else → use rule Y”
+
+---
+
+## 6. Shared Memory Optimization (Promotion Rules)
+
+**Purpose:** Promote only robust procedures into shared memory, preventing premature convergence
+
+**Implementation:** extend `core/memory/procedural_store.py` and curator promotion logic
+
+**Promotion Gates**
+
+* `helpful_count >= promote_threshold`
+* `harmful_count <= harmful_tolerance`
+* `status == active`
+* Optional: **cross-confirmation**
+
+  * The bullet has been successfully used (or validated) by both hemispheres
+
+**Translation on Promote**
+
+* Store a **side-neutral shared formulation**
+* Preserve origin metadata (don’t lose lineage)
+
+```python
+def can_promote_to_shared(bullet, config) -> bool:
+    if bullet.helpful_count < config.shared.promote_threshold:
+        return False
+    if bullet.harmful_count > config.shared.harmful_tolerance:
+        return False
+    if config.shared.require_cross_confirmation and not bullet.metadata.get("cross_confirmed"):
+        return False
+    return True
+```
+
+---
+
+## 7. Diversity Preservation & Drift Monitoring
+
+**Purpose:** Ensure Phase 5 doesn’t destroy the bicameral effect
+
+**Implementation:** `core/memory/diversity_metrics.py` (new)
+
+**Metrics**
+
+* Tag distribution divergence (Left vs Right)
+* Average embedding centroid distance
+* Suggestion acceptance rate
+* Cross-teaching volume per day
+* “Convergence warning” threshold
+
+**Policy Response**
+
+* If convergence detected:
+
+  * throttle suggestion delivery
+  * require stronger validation for shared promotion
+  * increase Right-side diversity rerank
+
+---
+
+## Configuration
+
+Add to `config/config.yaml` under `memory:` (recommended placement)
+
+```yaml
+memory:
+  short_term_capacity: 20
+  long_term_persistence: true
+  consolidation_threshold: 10
+
+  # Phase 5: Cross-Hemisphere Learning
+  cross_hemisphere:
+    mode: "shared_only"              # shared_only | suggestions | teaching
+    enabled: true
+
+    suggestions:
+      enabled: false                 # default OFF until Phase 5 is implemented
+      suggest_threshold: 2
+      min_suggest_confidence: 0.65
+      deliver_when_idle: true
+      max_pressure_to_deliver: 0.35
+      deliver_budget_per_tick: 1
+      max_pending: 2000
+      expiry_days: 14
+
+    shared:
+      promote_threshold: 3
+      harmful_tolerance: 0
+      require_cross_confirmation: false
+      translate_on_promote: true
+
+    conflicts:
+      enabled: true
+      policy: "quarantine_and_flag"  # quarantine_and_flag | conditional_merge
+
+    diversity:
+      enabled: true
+      convergence_warning_threshold: 0.15
+      throttle_on_convergence: true
+```
+
+---
+
+## Implementation Details
+
+### Suggestion Workflow
+
+```python
+from core.memory.suggestion_store import SuggestionStore
+from core.memory.curator import Curator
+
+store = SuggestionStore("./data/memory/suggestions.jsonl")
+curator = Curator(config, store)
+
+# Curator emits suggestions (does NOT write to other hemisphere directly)
+suggestions = curator.generate_suggestions(bullets_recently_successful)
+
+# Meta-controller delivers suggestions only under safe tick conditions
+if can_deliver_suggestions(tick_profile, config):
+    pending = store.list_pending(to_side="right")
+    for s in pending[:config.memory.cross_hemisphere.suggestions.deliver_budget_per_tick]:
+        apply_suggestion_to_hemisphere(memory_store, s)
+        store.mark_delivered(s.suggestion_id)
+```
+
+### Teaching Mode Example
+
+```python
+from core.memory.teaching import TeachingAPI
+
+teacher = TeachingAPI(config, suggestion_store, procedural_store)
+
+# Explicit teaching: Left teaches Right a rule (quarantined on receipt)
+suggestion_id = teacher.teach_bullet(
+    from_side="left",
+    to_side="right",
+    bullet_id="pb_left_00421",
+    translate=True
+)
+print("Created teaching suggestion:", suggestion_id)
+```
+
+### Conflict Handling Example
+
+```python
+from core.memory.conflict_detector import ConflictDetector
+
+detector = ConflictDetector(config)
+
+conflicts = detector.find_conflicts(
+    incoming_bullet=new_bullet,
+    existing_bullets=memory_store.query(to_side_collection, query=new_bullet.text, k=20)
+)
+
+if conflicts:
+    new_bullet.status = "quarantined"
+    new_bullet.metadata["conflicts_with"] = [c.id for c in conflicts]
+```
+
+---
+
+## Safety Mechanisms
+
+### 1. Quarantine First, Always
+
+* All cross-hemisphere imports start as `status="quarantined"`
+* They must earn activation via outcomes
+
+### 2. Auditability
+
+* Suggestions are first-class records
+* Every delivered/accepted/rejected suggestion is logged
+
+### 3. Delivery Throttling
+
+* Suggestions only delivered when safe (idle/low-pressure)
+* Budget per tick prevents flooding
+
+### 4. No Forced Convergence
+
+* Shared promotion is gated
+* Optional cross-confirmation prevents one hemisphere dominating shared memory
+
+---
+
+## Testing
+
+### Unit Tests
+
+* `tests/test_suggestion_store.py`
+* `tests/test_suggestion_delivery.py`
+* `tests/test_teaching_api.py`
+* `tests/test_conflict_detector.py`
+* `tests/test_shared_promotion_phase5.py`
+* `tests/test_diversity_metrics.py`
+
+### Integration Tests
+
+* `test_phase5_cross_hemisphere_learning.py`
+
+Tests should cover:
+
+* suggestion lifecycle
+* quarantined receipt behavior
+* validation-based activation
+* conflict detection + quarantine policy
+* shared promotion gates
+* convergence throttling
+
+---
+
+## Critical Design Principles
+
+### Cross-Teaching
+
+* NEVER copy bullets directly into the other hemisphere as active
+* ALWAYS quarantine cross-imports
+* ALWAYS preserve origin metadata
+* ALWAYS log suggestions and resolutions
+
+### Conflicts
+
+* ALWAYS detect potential contradictions before activation
+* NEVER merge contradictory rules without conditional logic
+* DEFAULT to quarantine-and-flag
+
+### Shared Memory
+
+* NEVER promote without repeated success
+* OPTIONAL: require both hemispheres to validate before shared promotion
+* ALWAYS translate to side-neutral wording on promote (recommended)
+
+### Diversity
+
+* ALWAYS monitor convergence
+* THROTTLE cross-teaching if hemispheres become too similar
+* KEEP Right exploratory (diversity rerank stays enabled)
+
+---
+
+## Files Created/Modified
+
+### Created
+
+* `core/memory/suggestion_store.py` — suggestion lifecycle + persistence
+* `core/memory/teaching.py` — explicit teaching API
+* `core/memory/conflict_detector.py` — contradiction detection + policy
+* `core/memory/diversity_metrics.py` — convergence monitoring + drift signals
+* `docs/PHASE5_CROSS_HEMISPHERE_LEARNING.md` — this document
+* `tests/test_suggestion_store.py`
+* `tests/test_conflict_detector.py`
+* `tests/test_teaching_api.py`
+* `test_phase5_cross_hemisphere_learning.py`
+
+### Modified
+
+* `core/memory/curator.py` — suggestion generation hook
+* `core/memory/procedural_store.py` — shared promotion gates + metadata
+* `core/memory/learning_pipeline.py` — integrate suggestion resolution signals
+* `config/config.yaml` — Phase 5 configuration section
+* `core/memory/__init__.py` — export new components
+
+---
+Got it — here’s the **Phase 5 addendum** that makes **“Forced exploration periods”** explicit, *without changing the plan’s structure*. This slots into the Phase 5 guide as a dedicated component + config + tests.
+
+---
+
+## Phase 5 Addendum: Forced Exploration Periods (Meta-Controller Policy)
+
+### Overview
+
+Forced exploration periods ensure the system doesn’t over-converge into the Left hemisphere’s stability loop. They periodically bias control toward the Right hemisphere to generate alternatives, probe assumptions, and uncover missing constraints—especially when the system has been “too successful” in a narrow pattern.
+
+**Key Insight:** Homogenization can happen even without cross-teaching. Success reinforces routines. Forced exploration protects long-term adaptability.
+
+---
+
+## What This Solves
+
+* **Left-lock / exploitation trap:** system keeps selecting safe known patterns even when conditions shift
+* **Idea starvation:** Right hemisphere doesn’t get enough “turns” to diversify policy
+* **Silent brittleness:** system fails catastrophically on novelty because novelty handling atrophied
+* **Convergence drift:** left/right behavioral difference shrinks over time
+
+---
+
+## Integration Point
+
+This is implemented as a **Meta-Controller tick policy** (not a new memory type). It affects:
+
+* hemisphere selection
+* suggestion delivery timing
+* reflection depth when exploration reveals contradictions
+
+It does **not**:
+
+* directly add bullets
+* directly modify helpful/harmful scores
+
+---
+
+## Component 8. Forced Exploration Scheduler
+
+**Purpose:** Guarantee periodic Right-hemisphere leadership (or Right-critique) based on schedule, pressure, or drift metrics.
+
+**Implementation:** `core/meta_controller/exploration_policy.py`
+
+### Modes
+
+1. **Quota Mode (recommended default)**
+   Maintain a minimum fraction of Right-led steps in a rolling window.
+
+2. **Interval Mode**
+   Force a Right-led tick every N ticks (or every N minutes when active).
+
+3. **Drift-Triggered Mode**
+   If divergence drops below threshold, increase exploration frequency until divergence recovers.
+
+4. **Stuck-Triggered Mode**
+   If repeated ticks return to the same hemisphere with no progress, force an exploration tick.
+
+---
+
+## Policy Logic
+
+### Inputs
+
+* `tick_profile`: pressure, uncertainty, conflict, novelty
+* `recent_history`: last N hemisphere decisions + outcomes
+* `divergence_metrics`: drift / convergence score
+* `task_risk`: optional, conservative override for high-risk tasks
+
+### Output
+
+* `force_right_lead: bool`
+* `force_right_critic: bool` (Right critiques a Left lead)
+* `exploration_budget_update`: +/− adjustments
+
+### Quota Mode Algorithm
+
+```python
+def should_force_exploration(history, config) -> bool:
+    window = history.last(config.exploration.window_size)
+    right_fraction = window.count("right_lead") / max(1, len(window))
+    return right_fraction < config.exploration.min_right_fraction
+```
+
+### Drift-Triggered Algorithm
+
+```python
+def should_force_exploration_from_drift(divergence, config) -> bool:
+    return divergence < config.diversity.convergence_warning_threshold
+```
+
+### Stuck-Triggered Algorithm
+
+```python
+def stuck_in_same_side(history, config) -> bool:
+    last = history.last(config.exploration.stuck_window)
+    return len(last) == config.exploration.stuck_window and len(set(last)) == 1
+```
+
+### Selection Rule (Priority)
+
+1. If **high-risk task** and `exploration_safe_override=False` → don’t force Right lead (allow Right critic only)
+2. If **stuck** → force Right lead
+3. If **drift detected** → increase Right frequency + force Right lead
+4. If **quota violated** → force Right lead
+5. Else normal arbitration
+
+---
+
+## Configuration
+
+Add to `config/config.yaml` under Phase 5:
+
+```yaml
+memory:
+  cross_hemisphere:
+    diversity:
+      enabled: true
+      convergence_warning_threshold: 0.15
+      throttle_on_convergence: true
+
+    exploration:
+      enabled: true
+      mode: "quota"                  # quota | interval | drift | stuck | hybrid
+      window_size: 50                # for quota mode
+      min_right_fraction: 0.25       # ensure 25% right-led in last 50 decisions
+
+      interval_ticks: 20             # for interval mode
+      stuck_window: 6                # for stuck-trigger
+
+      drift_boost_multiplier: 2.0    # how much to increase exploration under drift
+      allow_right_critic_on_high_risk: true
+      exploration_safe_override: false
+```
+
+---
+
+## Implementation Details
+
+### Meta-Controller Hook
+
+Where hemisphere selection occurs during a tick:
+
+```python
+from core.meta_controller.exploration_policy import ExplorationPolicy
+
+policy = ExplorationPolicy(config)
+
+decision = policy.evaluate(
+    tick_profile=tick_profile,
+    history=history,
+    divergence=divergence_metrics.current
+)
+
+if decision.force_right_lead:
+    lead = "right"
+elif decision.force_right_critic:
+    lead = "left"
+    critic = "right"
+else:
+    lead = normal_arbitration(...)
+```
+
+---
+
+## Metrics (Required for Checklist)
+
+Log these:
+
+* right-led fraction (rolling window)
+* forced exploration count
+* outcomes during forced exploration (success/failure, novelty detected)
+* divergence before/after drift boosts
+* left-lock events detected (stuck-trigger activations)
+
+This feeds:
+
+* cognitive diversity monitoring
+* hemisphere specialization tracking
+
+---
+
+## Testing
+
+### Unit Tests
+
+* `tests/test_exploration_policy_quota.py`
+* `tests/test_exploration_policy_drift.py`
+* `tests/test_exploration_policy_stuck.py`
+
+### Integration Test
+
+* `test_phase5_forced_exploration.py`
+
+Assertions:
+
+* quota enforcement triggers Right lead when Right usage falls below threshold
+* drift trigger increases Right selection rate
+* stuck trigger forces Right lead after N same-side decisions
+* high-risk override respects policy
+
+---
+
+## Checklist Mapping
+
+✅ Forced exploration periods
+
+* implemented as **ExplorationPolicy** + config + metrics + tests
+* integrates with **meta-controller tick** (no architectural changes)
+
+---
+
+If you want, I can also fold this into the Phase 5 guide section order cleanly (as “Component 8”) so it stays consistent with the rest of the plan.

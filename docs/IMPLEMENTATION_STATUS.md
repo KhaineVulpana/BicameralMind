@@ -154,6 +154,7 @@ Last Updated: December 24, 2025
 - ✅ `test_learning_simple.py` - Learning cycles, failure learning, tick-gated reflection
 - ✅ `test_tick_generation.py` - Novelty detection and tick generation
 - ✅ `test_mcp_integration.py` - MCP client, tool executor, trace generator, learning integration
+- ✅ `test_phase4_maintenance.py` - Deduplication, pruning, quality analysis, backup/recovery
 
 ### Integration Tests
 - ✅ Basic learning cycle (tick_rate=0.3)
@@ -164,6 +165,11 @@ Last Updated: December 24, 2025
 - ✅ Tool outcome learning
 - ✅ Insight extraction and curation
 - ✅ Outcome recording
+- ✅ Semantic deduplication
+- ✅ Quality-based bullet merging
+- ✅ Policy-based pruning (aggressive/balanced/conservative)
+- ✅ Backup and recovery operations
+- ✅ Maintenance scheduling
 
 ### Test Results
 All tests passing successfully:
@@ -177,16 +183,55 @@ All tests passing successfully:
 - Tool executor safely executes with logging
 - Trace generator converts tool results to traces
 - Learning integration automatically learns from tools
+- Deduplicator finds semantic duplicates
+- Merger consolidates duplicate bullets
+- Quality analyzer identifies low-quality bullets with multiple policies
+- Pruner safely removes bullets with backup
+- Scheduler automates maintenance tasks
 
-## Next Steps (Phase 4+)
+### Phase 4: Deduplication and Pruning ✅
+
+**Status**: Complete
+
+**Files Created**:
+- [core/memory/deduplicator.py](../core/memory/deduplicator.py) - Semantic similarity detection
+- [core/memory/bullet_merger.py](../core/memory/bullet_merger.py) - Bullet consolidation
+- [core/memory/quality_analyzer.py](../core/memory/quality_analyzer.py) - Quality detection with policies
+- [core/memory/pruner.py](../core/memory/pruner.py) - Safe bullet removal with backup
+- [core/memory/maintenance_scheduler.py](../core/memory/maintenance_scheduler.py) - Automated scheduling
+- [core/memory/maintenance.py](../core/memory/maintenance.py) - High-level maintenance API
+- [test_phase4_maintenance.py](../test_phase4_maintenance.py) - Test suite
+- [docs/PHASE4_DEDUPLICATION_PRUNING.md](./PHASE4_DEDUPLICATION_PRUNING.md) - Complete guide
+
+**Files Modified**:
+- [core/memory/__init__.py](../core/memory/__init__.py) - Exported Phase 4 components
+- [config/config.yaml](../config/config.yaml) - Added comprehensive maintenance configuration
+
+**Key Features Implemented**:
+- Semantic deduplication using cosine similarity on embeddings
+- Quality-based bullet merging (highest quality becomes primary)
+- Quality analyzer with 3 policies (aggressive/balanced/conservative)
+- Safe pruning with automatic backup and recovery
+- Scheduled maintenance (daily deduplication, weekly pruning)
+- High-level maintenance API (run_deduplication, run_pruning, run_full_maintenance)
+- Comprehensive backup and rollback support
+- Maintenance history and statistics tracking
+
+**Critical Design Principles**:
+- ALWAYS backup before destructive operations
+- Safety limits (max 100 bullets per run)
+- Require confirmation for large prunes (>50 bullets)
+- Complete audit trail for all operations
+- Policy-based pruning (aggressive/balanced/conservative)
+- Quality-based merge strategies
+- Configurable thresholds for all operations
+
+**Documentation**:
+- [PHASE4_DEDUPLICATION_PRUNING.md](./PHASE4_DEDUPLICATION_PRUNING.md)
+
+## Next Steps (Phase 5+)
 
 ### Recommended Order
-
-**Phase 4: Advanced Deduplication & Pruning** (Next)
-- Semantic similarity-based deduplication (currently stub)
-- Low-quality bullet pruning (currently stub)
-- Bullet consolidation and merging
-- Age-based and score-based cleanup
 
 **Phase 5: Cross-Hemisphere Learning**
 - Optional suggestion system between hemispheres
@@ -227,9 +272,17 @@ procedural_memory:
     min_insight_confidence: 0.5
     deep_reflection_llm: true
 
+  # Phase 4 settings
   maintenance:
-    prune_enabled: false  # Phase 4
-    deduplicate_enabled: false  # Phase 4
+    enabled: true
+    deduplicate_enabled: true
+    dedup_threshold: 0.90
+    dedup_schedule: "daily"
+    prune_enabled: true
+    prune_policy: "balanced"
+    prune_schedule: "weekly"
+    backup_before_prune: true
+    max_prune_per_run: 100
 ```
 
 ## Dependencies
@@ -284,7 +337,12 @@ None. All critical bugs have been resolved.
    python test_mcp_integration.py
    ```
 
-6. **See examples**:
+6. **Run Phase 4 tests**:
+   ```bash
+   python test_phase4_maintenance.py
+   ```
+
+7. **See examples**:
    - Phase 1: `examples/procedural_memory_example.py`
    - Phase 2: `examples/learning_pipeline_example.py`
    - Phase 2.5: `examples/tick_integration_example.py`
@@ -345,5 +403,5 @@ For questions, see documentation in [docs/](./):
 ---
 
 **Last Updated**: December 24, 2025
-**Status**: Phases 1, 2, 2.5, and 3 Complete ✅
-**Next**: Phase 4 - Advanced Deduplication & Pruning
+**Status**: Phases 1, 2, 2.5, 3, and 4 Complete ✅
+**Next**: Phase 5 - Cross-Hemisphere Learning
