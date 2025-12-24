@@ -13,10 +13,13 @@ This is the complete learning cycle:
 This module provides a high-level API for the entire learning process.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from loguru import logger
+
+if TYPE_CHECKING:
+    from core.meta_controller import MetaController
 
 from .reflector import Reflector, ExecutionTrace, ReflectionInsight, OutcomeType
 from .curator import Curator
@@ -183,6 +186,52 @@ class LearningPipeline:
         self.learning_history.append(result)
 
         return result
+
+    async def learn_from_trace_auto_tick(
+        self,
+        trace: ExecutionTrace,
+        meta_controller: "MetaController",
+        expected_success: Optional[bool] = None,
+        auto_add_bullets: bool = True,
+    ) -> LearningResult:
+        """Learning cycle with automatic tick calculation from meta_controller.
+
+        This is a convenience method that automatically calculates the tick rate
+        from the execution trace using the meta_controller's novelty detector.
+
+        Args:
+            trace: Execution trace to learn from
+            meta_controller: MetaController instance for tick calculation
+            expected_success: Optional expected outcome for novelty comparison
+            auto_add_bullets: If True, automatically add bullets to memory
+
+        Returns:
+            LearningResult with statistics
+        """
+
+        # Convert trace to dict for novelty detection
+        trace_dict = {
+            "success": trace.success,
+            "confidence": trace.confidence,
+            "tools_called": trace.tools_called,
+            "steps": trace.steps,
+            "error_message": trace.error_message,
+        }
+
+        # Calculate tick rate automatically
+        tick_rate = meta_controller.calculate_tick_rate_from_trace(
+            trace_data=trace_dict,
+            expected_success=expected_success,
+        )
+
+        logger.debug(f"🔍 Calculated tick_rate={tick_rate:.2f} from trace novelty")
+
+        # Use standard learning pipeline with calculated tick rate
+        return await self.learn_from_trace(
+            trace=trace,
+            tick_rate=tick_rate,
+            auto_add_bullets=auto_add_bullets,
+        )
 
     def _record_trace_outcome(
         self,

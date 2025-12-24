@@ -1,10 +1,11 @@
 """Meta Controller: Consciousness Tick System"""
 import asyncio
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
 from loguru import logger
+from .novelty_detector import NoveltyDetector
 
 
 class CognitiveMode(Enum):
@@ -42,21 +43,24 @@ class MetaController:
         self.config = config.get("bicameral", {})
         self.left = left_brain
         self.right = right_brain
-        
+
         self.tick_interval = self.config.get("tick_interval", 0.5)
         self.thresholds = self.config.get("tick_threshold", {
             "entropy": 0.6,
             "conflict": 0.5,
             "novelty": 0.7
         })
-        
+
         self.mode = CognitiveMode.IDLE
         self.tick_history = []
         self.running = False
-        
+
         self._tick_count = 0
         self._last_tick = time.time()
         self._last_mode_switch = time.time()
+
+        # Novelty detector for learning-oriented tick generation
+        self.novelty_detector = NoveltyDetector(config.get("novelty_detection", {}))
     
     async def start_ticker(self):
         """Start the consciousness tick loop"""
@@ -212,7 +216,7 @@ class MetaController:
     
     def get_consciousness_metrics(self) -> Dict[str, Any]:
         """Return meta-metrics about consciousness state"""
-        
+
         return {
             "mode": self.mode.value,
             "tick_count": self._tick_count,
@@ -221,3 +225,69 @@ class MetaController:
             "time_since_last_switch": time.time() - self._last_mode_switch,
             "recent_ticks": len([t for t in self.tick_history if time.time() - t.timestamp < 5.0])
         }
+
+    # ========================================================================
+    # Novelty-Based Tick Generation (for Learning Pipeline)
+    # ========================================================================
+
+    def calculate_novelty_tick_rate(
+        self,
+        expected_outcome: Optional[bool] = None,
+        actual_outcome: bool = False,
+        confidence: float = 0.5,
+        tools_used: List[str] = None,
+        tool_results: Dict[str, bool] = None,
+        error_message: Optional[str] = None,
+        context: Dict[str, Any] = None,
+    ) -> float:
+        """
+        Calculate tick rate based on novelty/surprise in execution.
+
+        This is the primary method for generating consciousness ticks
+        for the learning pipeline.
+
+        Returns:
+            tick_rate (0.0 - 1.0): Higher = more novel = deeper reflection
+        """
+
+        return self.novelty_detector.measure_novelty(
+            expected_outcome=expected_outcome,
+            actual_outcome=actual_outcome,
+            confidence=confidence,
+            tools_used=tools_used,
+            tool_results=tool_results,
+            error_message=error_message,
+            context=context,
+        )
+
+    def calculate_tick_rate_from_trace(
+        self,
+        trace_data: Dict[str, Any],
+        expected_success: Optional[bool] = None,
+    ) -> float:
+        """
+        Calculate tick rate from an execution trace dictionary.
+
+        Convenience method for learning pipeline integration.
+
+        Args:
+            trace_data: Execution trace with keys: success, confidence,
+                       tools_called, steps, error_message, etc.
+            expected_success: Optional expected outcome for comparison
+
+        Returns:
+            tick_rate (0.0 - 1.0): Novelty-based consciousness tick rate
+        """
+
+        return self.novelty_detector.measure_from_trace(
+            trace_data=trace_data,
+            expected_success=expected_success,
+        )
+
+    def get_current_novelty(self) -> float:
+        """Get current novelty level (moving average)."""
+        return self.novelty_detector.get_current_tick_rate()
+
+    def get_novelty_stats(self) -> Dict[str, Any]:
+        """Get detailed novelty detection statistics."""
+        return self.novelty_detector.get_stats()
