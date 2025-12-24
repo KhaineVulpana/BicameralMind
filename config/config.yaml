@@ -43,18 +43,72 @@ vector_store:
 
 mcp:
   # Enable MCP to allow the bicameral mind to call external tools via the
-  # Model Context Protocol.  When ``enabled`` is true the system will
-  # attempt to connect to the servers listed below.  Each entry should
-  # include a ``name`` and connection parameters appropriate for your
-  # environment.  See ``integrations/mcp/mcp_integration.py`` for
-  # implementation details and examples.
+  # Model Context Protocol. When enabled, the system will connect to the
+  # configured servers and discover available tools.
   enabled: true
+
+  # Connection settings
+  connection_timeout: 30  # seconds
+  tool_timeout: 60  # seconds per tool execution
+  max_retries: 3  # connection retry attempts
+
+  # Tool filtering
+  allowed_tools: []  # Empty list = allow all tools (except blocked)
+  blocked_tools: []  # Tools to explicitly block (e.g., ["delete_all", "format_disk"])
+
+  # Learning settings
+  auto_learn: true  # Automatically learn from tool executions
+  learn_on_success: true  # Learn from successful tool calls
+  learn_on_failure: true  # Learn from failed tool calls
+
+  # MCP Servers
   servers:
-    - name: "hubspot"
+    # Filesystem tools
+    - name: "filesystem"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "./data"]
+      enabled: true
+
+    # GitHub integration
+    - name: "github"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+      enabled: false  # Requires GitHub token
+
+    # Web search (Brave)
+    - name: "brave_search"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-brave-search"]
+      env:
+        BRAVE_API_KEY: "${BRAVE_API_KEY}"
+      enabled: false  # Requires Brave API key
+
+    # Google Drive
+    - name: "gdrive"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-gdrive"]
+      enabled: false  # Requires OAuth setup
+
+    # Slack
+    - name: "slack"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-slack"]
+      env:
+        SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+      enabled: false  # Requires Slack token
+
+    # Custom API server (example)
+    - name: "custom_api"
       type: "api"
-      # The endpoint value is a placeholder.  Configure this with the
-      # appropriate MCP server or API proxy that exposes your tools.
-      endpoint: ""  # e.g. "http://localhost:5000/mcp/hubspot"
+      endpoint: "http://localhost:5000/mcp"
+      enabled: false  # Configure endpoint as needed
 
 memory:
   short_term_capacity: 20

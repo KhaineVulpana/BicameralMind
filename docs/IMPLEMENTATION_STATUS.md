@@ -66,6 +66,70 @@ Last Updated: December 24, 2025
 **Documentation**:
 - [PHASE2_LEARNING_PIPELINE.md](./PHASE2_LEARNING_PIPELINE.md)
 
+### Phase 2.5: Automatic Tick Generation ✅
+
+**Status**: Complete
+
+**Files Created**:
+- [core/meta_controller/novelty_detector.py](../core/meta_controller/novelty_detector.py) - Novelty detection engine
+- [test_tick_generation.py](../test_tick_generation.py) - Test suite for tick generation
+- [examples/tick_integration_example.py](../examples/tick_integration_example.py) - Integration examples
+
+**Files Modified**:
+- [core/meta_controller/controller.py](../core/meta_controller/controller.py) - Added novelty integration
+- [core/meta_controller/__init__.py](../core/meta_controller/__init__.py) - Exported novelty components
+- [core/memory/learning_pipeline.py](../core/memory/learning_pipeline.py) - Added `learn_from_trace_auto_tick()`
+
+**Key Features Implemented**:
+- Novelty detector for consciousness ticks
+- Automatic tick calculation from execution novelty
+- Moving average to prevent oscillation
+- Evidence-based novelty measurements
+- Five novelty signal types
+
+**Documentation**:
+- [PHASE2_5_TICK_GENERATION.md](./PHASE2_5_TICK_GENERATION.md)
+
+### Phase 3: MCP Integration ✅
+
+**Status**: Complete
+
+**Files Created**:
+- [integrations/mcp/exceptions.py](../integrations/mcp/exceptions.py) - MCP-specific exceptions
+- [integrations/mcp/mcp_client.py](../integrations/mcp/mcp_client.py) - MCP protocol client
+- [integrations/mcp/tool_executor.py](../integrations/mcp/tool_executor.py) - Safe tool execution
+- [integrations/mcp/mcp_trace_generator.py](../integrations/mcp/mcp_trace_generator.py) - Trace generation
+- [integrations/mcp/mcp_learning_integration.py](../integrations/mcp/mcp_learning_integration.py) - Learning integration
+- [test_mcp_integration.py](../test_mcp_integration.py) - MCP integration test suite
+- [examples/mcp_usage_example.py](../examples/mcp_usage_example.py) - MCP usage examples
+
+**Files Modified**:
+- [integrations/mcp/__init__.py](../integrations/mcp/__init__.py) - Exported MCP components
+- [config/config.yaml](../config/config.yaml) - Comprehensive MCP configuration
+
+**Key Features Implemented**:
+- MCP server connection management
+- Tool discovery and registration
+- Safe tool execution with error handling
+- Tool result to ExecutionTrace conversion
+- Automatic outcome signal extraction
+- Integration with learning pipeline
+- Real-time learning from tool usage
+- Tool usage statistics tracking
+- Hemisphere-specific tool learning
+
+**Critical Design Principles**:
+- Tool outcomes MUST update bullet scores
+- High novelty from failures triggers deep reflection
+- Successful patterns MUST be promoted
+- Learning MUST NOT block tool execution
+- ALWAYS validate parameters before execution
+- ALWAYS capture success/failure signals
+- ALWAYS generate traces from tool calls
+
+**Documentation**:
+- [PHASE3_MCP_INTEGRATION.md](./PHASE3_MCP_INTEGRATION.md)
+
 ## Bug Fixes Applied
 
 ### Import Compatibility Issues
@@ -88,11 +152,16 @@ Last Updated: December 24, 2025
 ### Unit Tests
 - ✅ `test_procedural_memory.py` - Basic operations, bullet dataclass, hemisphere separation
 - ✅ `test_learning_simple.py` - Learning cycles, failure learning, tick-gated reflection
+- ✅ `test_tick_generation.py` - Novelty detection and tick generation
+- ✅ `test_mcp_integration.py` - MCP client, tool executor, trace generator, learning integration
 
 ### Integration Tests
 - ✅ Basic learning cycle (tick_rate=0.3)
 - ✅ Failure learning (tick_rate=0.9)
 - ✅ Tick-gated reflection depths
+- ✅ MCP tool execution with learning
+- ✅ Automatic trace generation from tools
+- ✅ Tool outcome learning
 - ✅ Insight extraction and curation
 - ✅ Outcome recording
 
@@ -103,18 +172,17 @@ All tests passing successfully:
 - Duplicate detection working
 - Tick rates correctly gate reflection depth
 - Outcome-based scoring functional
+- Novelty detector measures execution surprise
+- MCP client connects and discovers tools
+- Tool executor safely executes with logging
+- Trace generator converts tool results to traces
+- Learning integration automatically learns from tools
 
-## Next Steps (Phase 3+)
+## Next Steps (Phase 4+)
 
 ### Recommended Order
 
-**Phase 3: MCP Integration** (Next)
-- Automatic outcome signals from MCP tool execution
-- Tool result → learning pipeline integration
-- Real-time learning from tool success/failure
-- Example integrations with common MCP servers
-
-**Phase 4: Advanced Deduplication & Pruning**
+**Phase 4: Advanced Deduplication & Pruning** (Next)
 - Semantic similarity-based deduplication (currently stub)
 - Low-quality bullet pruning (currently stub)
 - Bullet consolidation and merging
@@ -206,9 +274,21 @@ None. All critical bugs have been resolved.
    python test_learning_simple.py
    ```
 
-4. **See examples**:
+4. **Run Phase 2.5 tests**:
+   ```bash
+   python test_tick_generation.py
+   ```
+
+5. **Run Phase 3 tests**:
+   ```bash
+   python test_mcp_integration.py
+   ```
+
+6. **See examples**:
    - Phase 1: `examples/procedural_memory_example.py`
    - Phase 2: `examples/learning_pipeline_example.py`
+   - Phase 2.5: `examples/tick_integration_example.py`
+   - Phase 3: `examples/mcp_usage_example.py`
 
 ## Architecture Summary
 
@@ -223,14 +303,30 @@ Bicameral Mind System
 ├── Shared Memory (Promoted knowledge)
 │   └── Consensus bullets (helpful_count >= 3)
 └── Learning Pipeline
-    ├── Execute Task
+    ├── Execute Task (potentially with MCP tools)
     ├── Generate Trace
+    ├── Calculate Novelty (automatic ticks)
     ├── Tick-Gated Reflection (shallow/medium/deep)
     ├── Extract Insights
     ├── Curate Bullets (with duplicate detection)
     ├── Add to Memory (QUARANTINED)
     ├── Record Outcomes
     └── Promote to ACTIVE → SHARED
+```
+
+### MCP Integration
+
+```
+Tool Execution with Learning
+├── Retrieve Relevant Bullets
+├── Execute MCP Tool
+│   ├── Validate Parameters
+│   ├── Call Tool
+│   └── Capture Result
+├── Generate ExecutionTrace
+├── Calculate Novelty (from tool outcome)
+├── Learn via Pipeline (if novelty high)
+└── Update Bullet Scores
 ```
 
 ## Contact & Contributing
@@ -249,5 +345,5 @@ For questions, see documentation in [docs/](./):
 ---
 
 **Last Updated**: December 24, 2025
-**Status**: Phase 1 & 2 Complete ✅
-**Next**: Phase 3 - MCP Integration
+**Status**: Phases 1, 2, 2.5, and 3 Complete ✅
+**Next**: Phase 4 - Advanced Deduplication & Pruning
