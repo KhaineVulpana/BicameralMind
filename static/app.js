@@ -47,9 +47,9 @@ function updateStatus(status) {
     statusEl.textContent = `Status: ${status}`;
 
     // Color coding
-    statusEl.style.color = status === 'CONNECTED' ? '#4ec9b0' :
-                          status === 'ERROR' ? '#f48771' :
-                          '#858585';
+    statusEl.style.color = status === 'CONNECTED' ? '#126a6f' :
+                          status === 'ERROR' ? '#e07a5f' :
+                          '#6b7280';
 }
 
 // Fetch system status

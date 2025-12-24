@@ -188,7 +188,7 @@ current_novelty = (
 
 ### Run Tick Generation Tests
 ```bash
-python test_tick_generation.py
+python tests/test_tick_generation.py
 ```
 
 Tests include:
@@ -413,7 +413,7 @@ We can integrate with MCP to:
 
 **Created**:
 - `core/meta_controller/novelty_detector.py` - Novelty detection engine
-- `test_tick_generation.py` - Test suite for tick generation
+- `tests/test_tick_generation.py` - Test suite for tick generation
 - `examples/tick_integration_example.py` - Integration examples
 
 **Modified**:

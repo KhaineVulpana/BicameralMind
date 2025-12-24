@@ -13,7 +13,7 @@ Last Updated: December 24, 2025
 - [core/memory/procedural_memory.py](../core/memory/procedural_memory.py) - High-level API wrapper
 - [core/memory/retrieval.py](../core/memory/retrieval.py) - Advanced retrieval patterns
 - [examples/procedural_memory_example.py](../examples/procedural_memory_example.py) - Comprehensive examples
-- [test_procedural_memory.py](../test_procedural_memory.py) - Test suite
+- [tests/test_procedural_memory.py](../tests/test_procedural_memory.py) - Test suite
 
 **Files Modified**:
 - [core/left_brain/agent.py](../core/left_brain/agent.py) - Integrated modern ProceduralMemory API
@@ -42,7 +42,7 @@ Last Updated: December 24, 2025
 - [core/memory/curator.py](../core/memory/curator.py) - Insight curation and quality control
 - [core/memory/learning_pipeline.py](../core/memory/learning_pipeline.py) - Complete learning orchestration
 - [examples/learning_pipeline_example.py](../examples/learning_pipeline_example.py) - Phase 2 examples
-- [test_learning_simple.py](../test_learning_simple.py) - Simple test suite
+- [tests/test_learning_simple.py](../tests/test_learning_simple.py) - Simple test suite
 
 **Files Modified**:
 - [core/memory/__init__.py](../core/memory/__init__.py) - Added Phase 2 exports
@@ -72,7 +72,7 @@ Last Updated: December 24, 2025
 
 **Files Created**:
 - [core/meta_controller/novelty_detector.py](../core/meta_controller/novelty_detector.py) - Novelty detection engine
-- [test_tick_generation.py](../test_tick_generation.py) - Test suite for tick generation
+- [tests/test_tick_generation.py](../tests/test_tick_generation.py) - Test suite for tick generation
 - [examples/tick_integration_example.py](../examples/tick_integration_example.py) - Integration examples
 
 **Files Modified**:
@@ -100,7 +100,7 @@ Last Updated: December 24, 2025
 - [integrations/mcp/tool_executor.py](../integrations/mcp/tool_executor.py) - Safe tool execution
 - [integrations/mcp/mcp_trace_generator.py](../integrations/mcp/mcp_trace_generator.py) - Trace generation
 - [integrations/mcp/mcp_learning_integration.py](../integrations/mcp/mcp_learning_integration.py) - Learning integration
-- [test_mcp_integration.py](../test_mcp_integration.py) - MCP integration test suite
+- [tests/test_mcp_integration.py](../tests/test_mcp_integration.py) - MCP integration test suite
 - [examples/mcp_usage_example.py](../examples/mcp_usage_example.py) - MCP usage examples
 
 **Files Modified**:
@@ -130,6 +130,44 @@ Last Updated: December 24, 2025
 **Documentation**:
 - [PHASE3_MCP_INTEGRATION.md](./PHASE3_MCP_INTEGRATION.md)
 
+### Phase 6: Cross-Hemisphere Learning (In Progress)
+
+**Status**: Core implementation complete; metrics/monitoring pending.
+
+**Files Created**:
+- [core/memory/suggestion_store.py](../core/memory/suggestion_store.py) - Suggestion lifecycle + persistence
+- [core/memory/suggestion_delivery.py](../core/memory/suggestion_delivery.py) - Tick-gated delivery
+- [core/memory/teaching.py](../core/memory/teaching.py) - Teaching API
+- [core/memory/conflict_detector.py](../core/memory/conflict_detector.py) - Conflict detection
+- [core/memory/diversity_metrics.py](../core/memory/diversity_metrics.py) - Convergence monitoring
+- [core/memory/config_utils.py](../core/memory/config_utils.py) - Cross-hemisphere config merge
+- [core/meta_controller/exploration_policy.py](../core/meta_controller/exploration_policy.py) - Forced exploration policy
+- [tests/test_phase6_cross_hemisphere_learning.py](../tests/test_phase6_cross_hemisphere_learning.py) - Phase 6 tests
+- [tests/test_phase6_forced_exploration.py](../tests/test_phase6_forced_exploration.py) - Forced exploration tests
+
+**Files Modified**:
+- [core/memory/bullet.py](../core/memory/bullet.py) - Metadata fields for suggestions
+- [core/memory/procedural_memory.py](../core/memory/procedural_memory.py) - Metadata plumbing and helpers
+- [core/memory/procedural_store.py](../core/memory/procedural_store.py) - Shared promotion gates + metadata
+- [core/memory/curator.py](../core/memory/curator.py) - Suggestion generation hook
+- [core/memory/learning_pipeline.py](../core/memory/learning_pipeline.py) - Suggestion generation/delivery hooks
+- [core/memory/__init__.py](../core/memory/__init__.py) - Exports
+- [core/meta_controller/controller.py](../core/meta_controller/controller.py) - Forced exploration + delivery hook
+- [core/meta_controller/__init__.py](../core/meta_controller/__init__.py) - Export exploration policy
+- [config/config.yaml](../config/config.yaml) - Phase 6 configuration section
+
+**Key Features Implemented**:
+- Suggestion lifecycle + delivery gating
+- Teaching API for explicit transfer
+- Conflict detection with quarantine metadata
+- Shared promotion gates with translation and cross-confirmation
+- Diversity metrics and convergence throttling
+- Forced exploration policy integration
+- Suggestion generation on successful outcomes
+
+**Documentation**:
+- [PHASE6](./PHASE6)
+
 ## Bug Fixes Applied
 
 ### Import Compatibility Issues
@@ -145,16 +183,18 @@ Last Updated: December 24, 2025
 ### Windows Console Unicode
 - **Issue**: Windows console can't encode Unicode characters (✓, →, etc.)
 - **Fix**: Created simplified test with ASCII-only output
-- **Files**: `test_learning_simple.py`
+- **Files**: `tests/test_learning_simple.py`
 
 ## Testing Status
 
 ### Unit Tests
-- ✅ `test_procedural_memory.py` - Basic operations, bullet dataclass, hemisphere separation
-- ✅ `test_learning_simple.py` - Learning cycles, failure learning, tick-gated reflection
-- ✅ `test_tick_generation.py` - Novelty detection and tick generation
-- ✅ `test_mcp_integration.py` - MCP client, tool executor, trace generator, learning integration
-- ✅ `test_phase4_maintenance.py` - Deduplication, pruning, quality analysis, backup/recovery
+- ✅ `tests/test_procedural_memory.py` - Basic operations, bullet dataclass, hemisphere separation
+- ✅ `tests/test_learning_simple.py` - Learning cycles, failure learning, tick-gated reflection
+- ✅ `tests/test_tick_generation.py` - Novelty detection and tick generation
+- ✅ `tests/test_mcp_integration.py` - MCP client, tool executor, trace generator, learning integration
+- ✅ `tests/test_phase4_maintenance.py` - Deduplication, pruning, quality analysis, backup/recovery
+- ✅ `tests/test_phase6_cross_hemisphere_learning.py` - Cross-hemisphere learning components
+- ✅ `tests/test_phase6_forced_exploration.py` - Forced exploration policy
 
 ### Integration Tests
 - ✅ Basic learning cycle (tick_rate=0.3)
@@ -188,6 +228,7 @@ All tests passing successfully:
 - Quality analyzer identifies low-quality bullets with multiple policies
 - Pruner safely removes bullets with backup
 - Scheduler automates maintenance tasks
+- Phase 6 cross-hemisphere tests pass (suggestions + forced exploration)
 
 ### Phase 4: Deduplication and Pruning ✅
 
@@ -200,7 +241,7 @@ All tests passing successfully:
 - [core/memory/pruner.py](../core/memory/pruner.py) - Safe bullet removal with backup
 - [core/memory/maintenance_scheduler.py](../core/memory/maintenance_scheduler.py) - Automated scheduling
 - [core/memory/maintenance.py](../core/memory/maintenance.py) - High-level maintenance API
-- [test_phase4_maintenance.py](../test_phase4_maintenance.py) - Test suite
+- [tests/test_phase4_maintenance.py](../tests/test_phase4_maintenance.py) - Test suite
 - [docs/PHASE4_DEDUPLICATION_PRUNING.md](./PHASE4_DEDUPLICATION_PRUNING.md) - Complete guide
 
 **Files Modified**:
@@ -233,19 +274,24 @@ All tests passing successfully:
 
 ### Recommended Order
 
-**Phase 5: Cross-Hemisphere Learning**
-- Optional suggestion system between hemispheres
-- Teaching mode for knowledge transfer
-- Conflict resolution strategies
-- Shared memory optimization
+**Phase 5: Desktop UI**
+- Complete dashboard + conversation UI
+- Streaming responses and bullet curation UI
+- Tool monitoring polish and configuration
 
-**Phase 6: Episodic Memory Integration**
+**Phase 6: Cross-Hemisphere Learning (Metrics/Monitoring)**
+- Suggestion learning metrics
+- Teaching effectiveness metrics
+- Cognitive diversity monitoring
+- Hemisphere specialization tracking
+
+**Phase 7: Episodic Memory Integration**
 - Link bullets to execution traces
 - Trace replay for learning validation
 - Pattern recognition across episodes
 - Causal chain analysis
 
-**Phase 7: Multi-Modal Learning**
+**Phase 8: Multi-Modal Learning**
 - Visual trace analysis
 - Audio/speech learning
 - Image-based insights
@@ -283,6 +329,22 @@ procedural_memory:
     prune_schedule: "weekly"
     backup_before_prune: true
     max_prune_per_run: 100
+
+  # Phase 6 settings
+  cross_hemisphere:
+    mode: "shared_only"
+    enabled: true
+    suggestions:
+      enabled: false
+    shared:
+      promote_threshold: 3
+      harmful_tolerance: 0
+    conflicts:
+      enabled: true
+    diversity:
+      enabled: true
+    exploration:
+      enabled: true
 ```
 
 ## Dependencies
@@ -319,27 +381,27 @@ None. All critical bugs have been resolved.
 
 2. **Run Phase 1 tests**:
    ```bash
-   python test_procedural_memory.py
+   python tests/test_procedural_memory.py
    ```
 
 3. **Run Phase 2 tests**:
    ```bash
-   python test_learning_simple.py
+   python tests/test_learning_simple.py
    ```
 
 4. **Run Phase 2.5 tests**:
    ```bash
-   python test_tick_generation.py
+   python tests/test_tick_generation.py
    ```
 
 5. **Run Phase 3 tests**:
    ```bash
-   python test_mcp_integration.py
+   python tests/test_mcp_integration.py
    ```
 
 6. **Run Phase 4 tests**:
    ```bash
-   python test_phase4_maintenance.py
+   python tests/test_phase4_maintenance.py
    ```
 
 7. **See examples**:
@@ -404,4 +466,4 @@ For questions, see documentation in [docs/](./):
 
 **Last Updated**: December 24, 2025
 **Status**: Phases 1, 2, 2.5, 3, and 4 Complete ✅
-**Next**: Phase 5 - Cross-Hemisphere Learning
+**Next**: Phase 5 - Desktop UI

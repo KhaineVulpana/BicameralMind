@@ -493,7 +493,7 @@ python -m pytest tests/test_mcp_trace_generator.py
 ### Integration Tests
 
 ```bash
-python test_mcp_integration.py
+python tests/test_mcp_integration.py
 ```
 
 Tests:

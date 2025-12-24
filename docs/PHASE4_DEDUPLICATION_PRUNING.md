@@ -607,7 +607,7 @@ python -m pytest tests/test_maintenance_scheduler.py
 ### Integration Tests
 
 ```bash
-python test_phase4_maintenance.py
+python tests/test_phase4_maintenance.py
 ```
 
 Tests:
@@ -667,7 +667,7 @@ With maintenance complete, the next phase is:
 - `core/memory/pruner.py` - Pruning system
 - `core/memory/maintenance_scheduler.py` - Scheduled maintenance
 - `core/memory/maintenance.py` - High-level maintenance API
-- `test_phase4_maintenance.py` - Test suite
+- `tests/test_phase4_maintenance.py` - Test suite
 - `examples/maintenance_example.py` - Usage examples
 
 **Modified**:

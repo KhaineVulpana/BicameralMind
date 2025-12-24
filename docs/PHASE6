@@ -500,12 +500,12 @@ if conflicts:
 
 ### Unit Tests
 
-* `test_phase6_cross_hemisphere_learning.py`
-* `test_phase6_forced_exploration.py`
+* `tests/test_phase6_cross_hemisphere_learning.py`
+* `tests/test_phase6_forced_exploration.py`
 
 ### Integration Tests
 
-* `test_phase6_cross_hemisphere_learning.py`
+* `tests/test_phase6_cross_hemisphere_learning.py`
 
 Tests should cover:
 
@@ -559,8 +559,8 @@ Tests should cover:
 * `core/memory/config_utils.py` - cross-hemisphere config merge helpers
 * `core/meta_controller/exploration_policy.py` - forced exploration policy
 * `docs/PHASE6` - this document
-* `test_phase6_cross_hemisphere_learning.py`
-* `test_phase6_forced_exploration.py`
+* `tests/test_phase6_cross_hemisphere_learning.py`
+* `tests/test_phase6_forced_exploration.py`
 
 ### Modified
 
@@ -761,11 +761,11 @@ This feeds:
 
 ### Unit Tests
 
-* `test_phase6_forced_exploration.py`
+* `tests/test_phase6_forced_exploration.py`
 
 ### Integration Test
 
-* `test_phase6_forced_exploration.py`
+* `tests/test_phase6_forced_exploration.py`
 
 Assertions:
 

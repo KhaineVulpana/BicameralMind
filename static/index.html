@@ -3,47 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BicameralMind - Testing UI</title>
+    <title>BicameralMind - Consciousness Console</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
-        <div class="header">
-            <h1>BicameralMind Testing Interface</h1>
-            <div class="status-bar">
-                <span id="status">Status: LOADING...</span>
-                <span id="mode">Mode: -</span>
-                <span id="tick">Tick: -</span>
+        <header class="app-header">
+            <div class="title-block">
+                <p class="eyebrow">BicameralMind Desktop UI</p>
+                <h1>Consciousness Console</h1>
+                <p class="subtitle">Live telemetry from the bicameral system, with conversation and tool monitoring in one view.</p>
             </div>
-        </div>
+            <div class="status-bar">
+                <span id="status" class="status-pill">Status: LOADING...</span>
+                <span id="mode" class="status-pill">Mode: -</span>
+                <span id="tick" class="status-pill">Tick: -</span>
+            </div>
+        </header>
 
         <!-- Three-column layout -->
         <div class="main-content">
             <!-- Left: Dashboard -->
             <div class="panel dashboard">
-                <h2>System</h2>
-                <div class="metric">
-                    <label>Memory:</label>
-                    <div id="memory">L:- R:- S:-</div>
+                <div class="panel-header">
+                    <div>
+                        <h2>System Overview</h2>
+                        <p class="panel-subtitle">Snapshot of memory, mode, and hemispheric focus.</p>
+                    </div>
+                    <span class="chip">Realtime</span>
                 </div>
-                <div class="metric">
-                    <label>Mode:</label>
-                    <div id="mode-detail">-</div>
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <span class="stat-label">Memory Footprint</span>
+                        <span id="memory" class="stat-value">L:- R:- S:-</span>
+                        <span class="stat-caption">Left / Right / Shared bullets</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Mode</span>
+                        <span id="mode-detail" class="stat-value">-</span>
+                        <span class="stat-caption">Meta-controller state</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Active Hemisphere</span>
+                        <span id="hemisphere" class="stat-value">-</span>
+                        <span class="stat-caption">Lead processing lane</span>
+                    </div>
                 </div>
-                <div class="metric">
-                    <label>Active:</label>
-                    <div id="hemisphere">-</div>
+                <div class="signal-grid">
+                    <div class="signal-card">
+                        <span class="signal-label">Consciousness Velocity</span>
+                        <div class="signal-bar"><span style="width: 72%"></span></div>
+                        <span class="signal-meta">Tick cadence vs baseline</span>
+                    </div>
+                    <div class="signal-card">
+                        <span class="signal-label">Learning Momentum</span>
+                        <div class="signal-bar"><span style="width: 58%"></span></div>
+                        <span class="signal-meta">Recent insight density</span>
+                    </div>
+                </div>
+                <div class="sparkline-card">
+                    <div class="sparkline-header">
+                        <span>Tick Cadence</span>
+                        <span class="sparkline-meta">Last 5 minutes</span>
+                    </div>
+                    <div class="sparkline">
+                        <span></span><span></span><span></span><span></span><span></span>
+                        <span></span><span></span><span></span><span></span><span></span>
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
                 </div>
             </div>
 
             <!-- Center: Chat -->
             <div class="panel chat-panel">
-                <h2>Conversation</h2>
+                <div class="panel-header">
+                    <div>
+                        <h2>Conversation Stream</h2>
+                        <p class="panel-subtitle">Left + right responses with tick context.</p>
+                    </div>
+                    <div class="chip secondary">Mode: Auto</div>
+                </div>
                 <div id="chat-messages" class="chat-messages">
                     <div class="message system">
                         <div class="text">BicameralMind ready. Type a message to begin.</div>
                     </div>
+                </div>
+                <div class="chat-metrics">
+                    <div class="metric-pill">Tokens: <strong>0</strong></div>
+                    <div class="metric-pill">Bullets: <strong>0</strong></div>
+                    <div class="metric-pill">Ticks: <strong>0</strong></div>
                 </div>
                 <div class="chat-input">
                     <input type="text" id="message-input" placeholder="Type your message..." autofocus>
@@ -54,7 +102,10 @@
             <!-- Right: MCP Tools -->
             <div class="panel mcp-panel">
                 <div class="panel-title-row">
-                    <h2>MCP Tools</h2>
+                    <div>
+                        <h2>MCP Tool Monitor</h2>
+                        <p class="panel-subtitle">Servers, executions, and live learning outcomes.</p>
+                    </div>
                     <button class="config-btn" onclick="openMCPConfig()" title="Configure MCP Servers">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
                             <path d="M8 3.5a.5.5 0 0 1 .5-.5h.5a.5.5 0 0 1 0 1h-.5a.5.5 0 0 1-.5-.5zm0 9a.5.5 0 0 1 .5-.5h.5a.5.5 0 0 1 0 1h-.5a.5.5 0 0 1-.5-.5z"/>
@@ -63,12 +114,17 @@
                         </svg>
                     </button>
                 </div>
+                <div class="section-title">Connected Servers</div>
                 <div id="mcp-servers">
                     <div class="loading">Loading...</div>
                 </div>
-                <h3>Recent Executions</h3>
+                <div class="section-title">Recent Executions</div>
                 <div id="mcp-log">
                     <div class="log-entry">No executions yet</div>
+                </div>
+                <div class="callout">
+                    <div class="callout-title">Learning Impact</div>
+                    <div class="callout-body">Tool outcomes are feeding into procedural memory. Watch for new bullets after successful runs.</div>
                 </div>
             </div>
         </div>

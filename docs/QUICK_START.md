@@ -29,7 +29,7 @@ ollama pull qwen2.5:14b
 ### Test Procedural Memory
 
 ```bash
-python test_procedural_memory.py
+python tests/test_procedural_memory.py
 ```
 
 This runs a test suite that verifies:
@@ -163,7 +163,7 @@ BicameralMind/
 │   ├── QUICK_START.md                       # ✨ NEW (this file)
 │   ├── Bicameral_Mind_Handoff.md
 │   └── Bicameral_Mind_Checklist.md
-├── test_procedural_memory.py     # ✨ NEW
+├── tests/test_procedural_memory.py     # ✨ NEW
 ├── main.py
 ├── requirements.txt
 └── config/
