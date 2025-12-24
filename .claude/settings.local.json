@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python examples/learning_pipeline_example.py:*)",
-      "Bash(python test_learning_simple.py:*)"
+      "Bash(python test_learning_simple.py:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nComplete Phase 2.5: Automatic Tick Generation\n\nImplemented novelty-based consciousness tick generation, completing the\nadaptive learning loop. The system now automatically calculates tick rates\nfrom execution surprise/novelty instead of manual specification.\n\nNew Components:\n- NoveltyDetector: Measures novelty from execution signals\n  * Prediction errors \\(expected != actual\\)\n  * Execution failures\n  * Low confidence\n  * Tool failures\n  * Unexpected successes\n- Enhanced MetaController with novelty integration\n- Learning pipeline auto-tick API\n\nKey Features:\n- Automatic tick calculation from execution traces\n- Evidence-based novelty measurements\n- Moving average to prevent oscillation\n- Tick rate mapping \\(0.0-1.0\\) to reflection depth\n- Complete integration with learning pipeline\n\nTesting:\n- test_tick_generation.py: Comprehensive test suite\n- examples/tick_integration_example.py: Integration demos\n- All tests passing\n\nHow It Works:\n1. Execute task -> Generate trace\n2. Calculate novelty \\(meta_controller\\)\n3. Generate tick rate based on surprise\n4. Tick-gated reflection \\(low/medium/deep\\)\n5. Extract insights and learn\n\nBenefits:\n- No more manual tick specification\n- Truly adaptive learning based on surprise\n- High novelty -> Deep reflection -> More learning\n- Low novelty -> Efficiency \\(no unnecessary reflection\\)\n\nDocumentation: docs/PHASE2_5_TICK_GENERATION.md\n\nGenerated with Claude Code\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
