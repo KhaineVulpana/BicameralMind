@@ -178,9 +178,9 @@ procedural_memory:
   # Staging configuration (hemisphere assignment gate)
   staging:
     enabled: true
-    auto_assign: false
-    auto_assign_threshold: 0.85
-    manual_review_threshold: 0.7
+    auto_assign: true  # Enable classifier-based auto-assignment
+    auto_assign_threshold: 0.85  # High-confidence threshold for auto-assignment
+    manual_review_threshold: 0.7  # Below this, flag as high-priority review
 
   # Maintenance configuration (Phase 4)
   maintenance:
