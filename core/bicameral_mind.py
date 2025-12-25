@@ -53,6 +53,7 @@ class BicameralMind:
         # Initialize procedural memory
         self.memory = ProceduralMemory(self.config)
 
+
         # Initialize RAG if enabled
         self.rag = None
         if self.config.get("rag", {}).get("enabled", False):
