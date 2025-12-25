@@ -12,6 +12,7 @@ from core.base_agent import Message, MessageType
 from integrations.rag.agentic_rag import AgenticRAG
 from core.memory import ProceduralMemory
 from core.tools import initialize_tools, register_mcp_tools
+from core.memory import EpisodicStore
 
 try:
     from integrations.mcp import MCPClient
@@ -47,6 +48,7 @@ class BicameralMind:
 
         # Initialize procedural memory FIRST
         self.memory = ProceduralMemory(self.config)
+        self.episodic_store = EpisodicStore(self.config)
 
         # Initialize brain hemispheres WITH procedural memory
         self.left_brain = LeftBrain(self.config, self.llm, procedural_memory=self.memory)

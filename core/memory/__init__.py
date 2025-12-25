@@ -20,6 +20,7 @@ from .teaching import TeachingAPI
 from .conflict_detector import ConflictDetector
 from .diversity_metrics import DiversityMetrics
 from .procedure_store import ProcedureStore, Procedure, ProcedureStatus, ProcedureStep, ProcedureStepType
+from .episodic_store import EpisodicStore, Episode
 from .bullet_formatter import format_bullets_for_prompt, format_bullets_compact, format_bullets_with_metadata
 
 # Phase 4: Maintenance
@@ -66,6 +67,8 @@ __all__ = [
     'ProcedureStatus',
     'ProcedureStep',
     'ProcedureStepType',
+    'EpisodicStore',
+    'Episode',
 
     # Maintenance (Phase 4)
     'Deduplicator',

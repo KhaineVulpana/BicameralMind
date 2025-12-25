@@ -19,7 +19,7 @@ try:
     from core.bicameral_mind import BicameralMind
     from core.tools import ToolDefinition, ToolExecutionContext, initialize_tools, register_mcp_tools
     from core.memory.bullet import Hemisphere
-    from core.memory import ProcedureStore, Procedure
+    from core.memory import ProcedureStore, Procedure, EpisodicStore, Episode
     from config.config_loader import load_config, save_config
     BICAMERAL_AVAILABLE = True
 except ImportError as e:
@@ -55,6 +55,7 @@ tool_registry = None
 tool_executor = None
 tool_index = None
 procedure_store = None
+episodic_store = None
 active_connections: list[WebSocket] = []
 
 # Serve static files
@@ -131,11 +132,15 @@ class ProcedureRequest(BaseModel):
     data: dict
 
 
+class EpisodeRequest(BaseModel):
+    data: dict
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize bicameral mind on startup"""
     global bicameral_mind
-    global tool_registry, tool_executor, tool_index, procedure_store
+    global tool_registry, tool_executor, tool_index, procedure_store, episodic_store
 
     if not BICAMERAL_AVAILABLE:
         print("[INFO] Running in TEST MODE - UI only, no bicameral mind")
@@ -146,6 +151,9 @@ async def startup():
             if ProcedureStore:
                 procedure_store = ProcedureStore(config)
                 procedure_store.load()
+            if EpisodicStore:
+                episodic_store = EpisodicStore(config)
+                episodic_store.load()
         return
 
     try:
@@ -162,6 +170,9 @@ async def startup():
         if ProcedureStore:
             procedure_store = ProcedureStore(config)
             procedure_store.load()
+        if EpisodicStore:
+            episodic_store = EpisodicStore(config)
+            episodic_store.load()
 
         if getattr(bicameral_mind, "mcp_client", None) and config.get("mcp", {}).get("enabled", False):
             try:
@@ -409,6 +420,56 @@ async def delete_procedure(proc_id: str):
     if not procedure_store:
         return {"error": "store_unavailable"}
     removed = procedure_store.delete(proc_id)
+    return {"status": "success" if removed else "not_found"}
+
+
+# Episodic memory
+@app.get("/api/episodes")
+async def list_episodes(side: Optional[str] = None, limit: int = 50):
+    """List episodic memories."""
+    if not episodic_store:
+        return {"episodes": []}
+    episodes = episodic_store.list(limit=limit, side=side)
+    return {"episodes": [ep.to_dict() for ep in episodes]}
+
+
+@app.get("/api/episodes/search")
+async def search_episodes(q: str, k: int = 5, side: Optional[str] = None):
+    """Search episodic memories."""
+    if not episodic_store:
+        return {"episodes": []}
+    episodes, ids = episodic_store.search(q, k=k, side=side)
+    return {"episodes": [ep.to_dict() for ep in episodes], "ids": ids}
+
+
+@app.post("/api/episodes")
+async def create_episode(request: EpisodeRequest):
+    """Create an episode."""
+    if not episodic_store:
+        return {"error": "store_unavailable"}
+    data = request.data or {}
+    if not data.get("id"):
+        return {"error": "id_required"}
+    ep = episodic_store.add(
+        episode_id=data["id"],
+        title=data.get("title", ""),
+        summary=data.get("summary", ""),
+        content=data.get("content", ""),
+        side=data.get("side", "shared"),
+        tags=data.get("tags") or [],
+        outcome=data.get("outcome", "unknown"),
+        trace_ids=data.get("trace_ids") or [],
+        metadata=data.get("metadata") or {},
+    )
+    return {"status": "success", "episode": ep.to_dict()}
+
+
+@app.delete("/api/episodes/{episode_id}")
+async def delete_episode(episode_id: str):
+    """Delete an episode."""
+    if not episodic_store:
+        return {"error": "store_unavailable"}
+    removed = episodic_store.delete(episode_id)
     return {"status": "success" if removed else "not_found"}
 
 

@@ -402,24 +402,22 @@ Last Updated: December 25, 2025
 ## RAG System (Separate from Procedural Memory)
 
 ### Current RAG
-- ✅ Agentic RAG implementation
-- ✅ Iterative retrieval
-- ✅ Self-checking coverage
-- ✅ Query refinement
-- ✅ Knowledge base management
-- ✅ Integration with bicameral mind
-- ✅ Both single-pass and agentic modes
+- Agentic RAG implementation
+- Iterative retrieval
+- Self-checking coverage
+- Query refinement
+- Knowledge base management
+- Integration with bicameral mind
+- Both single-pass and agentic modes
 
-### RAG Maintenance Needed
-- ✅ Fix deprecated langchain imports (use langchain_community.embeddings)
-- ✅ Remove unicode/emoji characters from logging
-- ✅ Create test suite (tests/test_agentic_rag.py)
-- ✅ Create standalone usage examples
-- ✅ Add documentation (AGENTIC_RAG.md)
+### RAG Maintenance Status
+- [x] Fixed deprecated langchain imports (langchain_community embeddings)
+- [x] Removed unicode/emoji characters from logging
+- [x] Created test suite (tests/test_agentic_rag.py)
+- [x] Added standalone usage examples and docs (AGENTIC_RAG.md)
 
 ---
 
-## Testing & Quality
 
 ### Test Coverage
 - ✅ Procedural memory unit tests
@@ -537,10 +535,23 @@ Last Updated: December 25, 2025
 
 ---
 
-## Future Phases (Phase 7+) ❌ NOT STARTED
+## Phase 7: Episodic Memory & RAG Hardening - IN PROGRESS
+
+Done
+- EpisodicStore implemented (JSONL + Chroma index) with add/list/search/delete
+- FastAPI endpoints (/api/episodes list/search/add/delete); BicameralMind initializes episodic_store
+- Agentic RAG refactor complete; AGENTIC_RAG.md added; tests/test_agentic_rag.py passing; ASCII-safe logging
+
+Remaining
+- Capture execution traces into episodic_store during processing with retention/promotion policies
+- Retrieve relevant episodes into agent prompts and UI (dashboard/chat context)
+- Add integration tests for episode capture and retrieval; run tests/test_episodic_store.py when deps installed
+- Surface episodic metadata in UI/status and schedule cleanup/expiry
+- Connect episodic signals to learning/playbook promotion if applicable
+
+## Future Phases (Phase 8+) NOT STARTED
 
 See archived sections for:
-- Phase 7: Episodic Memory Integration
 - Phase 8: Multi-Modal Learning
 - Phase 9: Meta-Cognitive Planner
 - Phase 10: GAN-Based Generative Learning

@@ -4,11 +4,24 @@ model:
   max_tokens: 2048
 
 bicameral:
-  tick_interval: 0.5  # seconds between consciousness ticks
+  tick_interval: 0.5  # seconds between consciousness ticks (base rate)
   tick_threshold:
     entropy: 0.6  # uncertainty threshold
     conflict: 0.5  # inter-brain conflict threshold
     novelty: 0.7  # pattern novelty threshold
+
+  # Adaptive tick interval (Phase 6+)
+  adaptive_tick: true  # Enable dynamic tick rate adjustment
+  min_tick_interval: 0.1  # Fastest tick rate (high pressure/alertness)
+  max_tick_interval: 2.0  # Slowest tick rate (low pressure/alertness)
+
+  # Energy/Attention budget (Phase 6+)
+  energy_budget_enabled: true  # Enable energy management
+  max_energy: 100.0  # Maximum energy capacity
+  energy_regen_rate: 10.0  # Energy regeneration per second
+  energy_cost_explore: 15.0  # Cost for EXPLORE mode
+  energy_cost_exploit: 5.0  # Cost for EXPLOIT mode
+  energy_cost_integrate: 20.0  # Cost for INTEGRATE mode
   
   left_brain:
     name: "PatternRecognition"
@@ -44,6 +57,12 @@ vector_store:
   type: "chroma"  # chroma or faiss
   persist_directory: "./data/vector_store"
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+episodic_memory:
+  path: "./data/memory/episodes.jsonl"
+  persist_directory: "./data/vector_store/episodes"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  top_k: 5
 
 tools:
   enabled: true
