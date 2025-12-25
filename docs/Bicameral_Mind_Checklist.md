@@ -30,9 +30,12 @@ Last Updated: December 25, 2025
 - ✅ No cross-hemisphere contamination
 
 ### Integration
-- 🔄 Left brain agent integration (needs bullet retrieval wiring)
-- 🔄 Right brain agent integration (needs bullet retrieval wiring)
+- ✅ Left brain agent integration (bullets wired into generation)
+- ✅ Right brain agent integration (bullets wired into generation)
 - ✅ BicameralMind orchestrator integration
+- ✅ Bullet retrieval during agent processing
+- ✅ Bullet formatter for LLM context
+- ✅ Integration tests (test_bullet_integration.py passing)
 - ✅ Comprehensive examples
 - ✅ Test suite
 
@@ -59,7 +62,7 @@ Last Updated: December 25, 2025
 - ✅ Outcome recording
 - ✅ Bullet promotion logic
 - ✅ Learning pipeline orchestration
-- 🔄 Integration with agents (needs bullet injection into prompts)
+- ✅ Integration with agents (bullets injected into prompts - FIXED Dec 25, 2025)
 
 ---
 
@@ -262,20 +265,19 @@ Last Updated: December 25, 2025
 
 ## CRITICAL GAPS IDENTIFIED (December 25, 2025)
 
-### 1. Bullets Not Retrieved During Generation ⚠️ CRITICAL
+### 1. Bullets Not Retrieved During Generation ✅ RESOLVED
 **Problem**: Agents call LLM directly without retrieving procedural memory
-- LeftBrain.process() doesn't call memory.retrieve()
-- RightBrain.process() doesn't call memory.retrieve()
-- Bullets exist but are never used during execution
-- System can't learn from past experiences
 
-**Impact**: Defeats entire ACE/learning architecture
+**Solution Implemented** (December 25, 2025):
+- ✅ Created bullet_formatter.py for formatting bullets into LLM context
+- ✅ Rewrote LeftBrain.process() to retrieve bullets (k=8, min_conf=0.5)
+- ✅ Rewrote RightBrain.process() to retrieve bullets (k=12, min_conf=0.3)
+- ✅ Updated BicameralMind to pass procedural memory to agents
+- ✅ Added config settings (k_bullets, min_bullet_confidence)
+- ✅ Track bullet_ids in metadata for outcome recording
+- ✅ Created test_bullet_integration.py (all tests passing)
 
-**Fix Needed**:
-1. Wire bullet retrieval into agent prompts
-2. Format bullets for LLM context
-3. Track which bullets were used
-4. Generate execution traces properly
+**Result**: Bullets now properly retrieved and injected into LLM context during generation
 
 ### 2. Hemisphere Assignment Based on Executor, Not Content ⚠️ CRITICAL
 **Problem**: Bullets assigned to hemisphere based on which agent executed, not insight cognitive style
@@ -290,19 +292,19 @@ Last Updated: December 25, 2025
 2. Use meta-bullets for classification
 3. High-confidence auto-assign, low-confidence manual review
 
-### 3. Questions Not Implemented
+### 3. Questions Not Implemented 🚧 PARTIALLY RESOLVED
 **Problem**: Agents never ask clarifying/exploratory questions
-- Design calls for left brain binary questions
-- Design calls for right brain open-ended questions
-- QUESTION bullet type doesn't exist
-- No question-asking strategy bullets
 
-**Impact**: System can't handle ambiguity or explore effectively
+**Solution Implemented** (December 25, 2025):
+- ✅ Added QUESTION bullet type to BulletType enum
+- ✅ Updated bullet_formatter.py to handle QUESTION type
+- ❌ Question-asking logic not yet implemented in agents
+- ❌ No question template bullets created
 
-**Fix Needed**:
-1. Add QUESTION bullet type
-2. Implement question-asking logic in agents
-3. Create question template bullets
+**Remaining Work**:
+1. Create question template bullets for common scenarios
+2. Implement question-asking logic in agent processing
+3. Wire questions into response generation
 
 ### 4. Tool Integration Gaps
 **Problem**: MCP client exists but not wired to runtime
@@ -443,26 +445,26 @@ Last Updated: December 25, 2025
 
 ## Next Immediate Tasks (Priority Order)
 
-### 1. **Fix Critical Gap: Wire Bullets into Agent Prompts** ⚠️ HIGHEST PRIORITY
-   - Modify LeftBrain.process() to retrieve bullets
-   - Modify RightBrain.process() to retrieve bullets
-   - Create format_bullets_for_prompt() utility
-   - Include bullets in LLM context
-   - Track bullet_ids for outcome recording
-   - Test end-to-end: query → retrieval → generation → learning
+### 1. **Fix Critical Gap: Wire Bullets into Agent Prompts** ✅ COMPLETE
+   - ✅ Modify LeftBrain.process() to retrieve bullets
+   - ✅ Modify RightBrain.process() to retrieve bullets
+   - ✅ Create format_bullets_for_prompt() utility
+   - ✅ Include bullets in LLM context
+   - ✅ Track bullet_ids for outcome recording
+   - ✅ Test end-to-end: query → retrieval → generation → learning
 
-### 2. **Implement Staging & Classification** (Phase 4.5)
-   - Install meta-bullets to procedural memory
-   - Create procedural_staging collection
-   - Implement staging API methods
-   - Wire classifier into curation flow
-   - Test classification accuracy
+### 2. **Implement Staging & Classification** (Phase 4.5) 🚧 IN PROGRESS
+   - 🚧 Install meta-bullets to procedural memory
+   - ✅ Create procedural_staging collection (code exists)
+   - ✅ Implement staging API methods (code exists)
+   - ❌ Wire classifier into curation flow
+   - ❌ Test classification accuracy
 
-### 3. **Add Question Support**
-   - Add QUESTION bullet type to enum
-   - Create question template bullets
-   - Implement question-asking logic in agents
-   - Wire questions into response generation
+### 3. **Add Question Support** 🚧 PARTIALLY COMPLETE
+   - ✅ Add QUESTION bullet type to enum
+   - ❌ Create question template bullets
+   - ❌ Implement question-asking logic in agents
+   - ❌ Wire questions into response generation
 
 ### 4. **Phase 5: Desktop UI - Staging Review Queue**
    - Create bullet review page
