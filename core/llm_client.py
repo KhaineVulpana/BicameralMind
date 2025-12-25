@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from langchain_community.llms import Ollama
+try:
+    from langchain_ollama import OllamaLLM as Ollama
+except ImportError:
+    # Fallback to old import for compatibility
+    from langchain_community.llms import Ollama
 
 
 class LLMClient(Ollama):
