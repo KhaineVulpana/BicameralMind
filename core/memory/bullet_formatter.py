@@ -90,6 +90,13 @@ def format_bullets_for_prompt(bullets: List[Bullet]) -> str:
             section += f"  • {bullet.text}\n"
         sections.append(section)
 
+    # Questions (to ask in certain contexts)
+    if BulletType.QUESTION in by_type:
+        section = "QUESTIONS TO ASK:\n"
+        for bullet in by_type[BulletType.QUESTION]:
+            section += f"  ? {bullet.text}\n"
+        sections.append(section)
+
     return "\n".join(sections)
 
 
@@ -163,6 +170,7 @@ def _get_type_marker(bullet_type: BulletType) -> str:
         BulletType.EXAMPLE: "📝",
         BulletType.TEMPLATE: "📋",
         BulletType.CONCEPT: "🎯",
+        BulletType.QUESTION: "❓",
     }
     return markers.get(bullet_type, "•")
 

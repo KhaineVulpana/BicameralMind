@@ -26,6 +26,7 @@ class BulletType(str, Enum):
     EXAMPLE = "example"              # Concrete examples
     PATTERN = "pattern"              # Recognized patterns
     CONCEPT = "concept"              # Domain concepts
+    QUESTION = "question"            # Questions to ask in certain contexts
 
 
 class BulletStatus(str, Enum):
