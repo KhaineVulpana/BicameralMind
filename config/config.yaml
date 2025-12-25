@@ -41,6 +41,17 @@ vector_store:
   persist_directory: "./data/vector_store"
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
 
+tools:
+  enabled: true
+  registry_path: "./data/tools/tool_registry.json"
+  index_persist_directory: "./data/vector_store/tools"
+  index_collection: "tool_registry"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  auto_discover: true
+  auto_index: true
+  allowed_tools: []
+  blocked_tools: []
+
 mcp:
   # Enable MCP to allow the bicameral mind to call external tools via the
   # Model Context Protocol. When enabled, the system will connect to the
