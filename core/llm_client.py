@@ -19,5 +19,4 @@ class LLMClient(Ollama):
             model=model_config.get("name", "qwen2.5:14b"),
             temperature=model_config.get("temperature", 0.7),
             base_url=model_config.get("base_url"),
-        )
-i 
+        ) 
