@@ -1,10 +1,9 @@
-"""Agentic RAG: Iterative Retrieval with Self-Checking"""
+"""Agentic RAG: Iterative Retrieval with Self-Checking."""
 import asyncio
 from typing import List, Dict, Any, Optional
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_core.prompts import ChatPromptTemplate
 from loguru import logger
 
 
@@ -17,45 +16,39 @@ class AgenticRAG:
     - Goal-directed search with stopping criteria
     """
     
-    def __init__(self, config: Dict[str, Any], llm_client):
-        self.config = config.get("rag", {})
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        llm_client,
+        *,
+        vectorstore=None,
+        splitter: Optional[RecursiveCharacterTextSplitter] = None,
+        embeddings=None,
+    ):
+        self.config = config.get("rag", {}) if isinstance(config, dict) else {}
         self.llm = llm_client
-        
-        # Vector store setup
-        embeddings = HuggingFaceEmbeddings(
-            model_name=config.get("vector_store", {}).get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2")
-        )
-        
-        persist_dir = config.get("vector_store", {}).get("persist_directory", "./data/vector_store")
-        
-        self.vectorstore = Chroma(
-            persist_directory=persist_dir,
-            embedding_function=embeddings
-        )
-        
+
+        # Vector store setup (allow injection for tests)
+        if vectorstore is not None:
+            self.vectorstore = vectorstore
+        else:
+            embed_model = (config.get("vector_store", {}) or {}).get(
+                "embedding_model", "sentence-transformers/all-MiniLM-L6-v2"
+            )
+            embeddings = embeddings or HuggingFaceEmbeddings(model_name=embed_model)
+            persist_dir = (config.get("vector_store", {}) or {}).get(
+                "persist_directory", "./data/vector_store"
+            )
+            self.vectorstore = Chroma(
+                persist_directory=persist_dir,
+                embedding_function=embeddings,
+            )
+
         # Text splitter
-        self.splitter = RecursiveCharacterTextSplitter(
+        self.splitter = splitter or RecursiveCharacterTextSplitter(
             chunk_size=self.config.get("chunk_size", 512),
-            chunk_overlap=self.config.get("chunk_overlap", 50)
+            chunk_overlap=self.config.get("chunk_overlap", 50),
         )
-        
-        # RAG templates
-        self.query_refine_template = ChatPromptTemplate.from_messages([
-            ("system", "Analyze the query and retrieved context. If gaps exist, reformulate the query to get better results."),
-            ("human", """Query: {query}
-Retrieved: {retrieved}
-Coverage: {coverage}
-
-Should we search again? If yes, provide refined query. If no, say SUFFICIENT.""")
-        ])
-        
-        self.synthesis_template = ChatPromptTemplate.from_messages([
-            ("system", "Synthesize retrieved information to answer the query."),
-            ("human", """Query: {query}
-Context: {context}
-
-Answer:""")
-        ])
     
     async def retrieve(self, query: str, mode: str = "agentic") -> Dict[str, Any]:
         """
@@ -71,6 +64,9 @@ Answer:""")
     async def _single_pass_retrieve(self, query: str) -> Dict[str, Any]:
         """Traditional RAG: single retrieval pass"""
         
+        if not self.vectorstore:
+            raise RuntimeError("Vector store is not initialized")
+
         docs = self.vectorstore.similarity_search(
             query,
             k=self.config.get("top_k", 5)
@@ -78,12 +74,8 @@ Answer:""")
         
         context = "\n\n".join([doc.page_content for doc in docs])
         
-        # Synthesize answer
-        chain = self.synthesis_template | self.llm
-        response = await chain.ainvoke({
-            "query": query,
-            "context": context
-        })
+        prompt = self._format_synthesis_prompt(query, context)
+        response = await self.llm.ainvoke(prompt)
         
         return {
             "answer": response.content if hasattr(response, 'content') else str(response),
@@ -98,8 +90,11 @@ Answer:""")
         all_retrieved = []
         iteration = 0
         current_query = query
+
+        if not self.vectorstore:
+            raise RuntimeError("Vector store is not initialized")
         
-        logger.info(f"🔍 Agentic RAG: Starting retrieval for '{query}'")
+        logger.info(f"Agentic RAG: Starting retrieval for '{query}'")
         
         while iteration < max_iterations:
             iteration += 1
@@ -116,11 +111,11 @@ Answer:""")
             context = "\n\n".join([doc.page_content for doc in all_retrieved])
             coverage = await self._assess_coverage(query, context, iteration)
             
-            logger.debug(f"  Iteration {iteration}: Coverage {coverage['score']:.2f}")
+            logger.debug(f"Iteration {iteration}: Coverage {coverage['score']:.2f}")
             
             # Decide: continue or stop?
             if coverage["sufficient"] or iteration >= max_iterations:
-                logger.info(f"✓ Coverage sufficient after {iteration} iterations")
+                logger.info(f"Coverage sufficient after {iteration} iterations")
                 break
             
             # Refine query
@@ -134,12 +129,8 @@ Answer:""")
         
         # Synthesize final answer
         final_context = "\n\n".join([doc.page_content for doc in all_retrieved])
-        
-        chain = self.synthesis_template | self.llm
-        response = await chain.ainvoke({
-            "query": query,
-            "context": final_context
-        })
+        prompt = self._format_synthesis_prompt(query, final_context)
+        response = await self.llm.ainvoke(prompt)
         
         return {
             "answer": response.content if hasattr(response, 'content') else str(response),
@@ -151,19 +142,11 @@ Answer:""")
     async def _assess_coverage(self, query: str, context: str, iteration: int) -> Dict[str, Any]:
         """Assess if retrieved context sufficiently covers the query"""
         
-        # Simple heuristic: check if context mentions key terms
-        # More sophisticated: use LLM to judge coverage
-        
-        prompt = f"""Does this context sufficiently answer the query?
-Query: {query}
-Context: {context[:500]}...
-
-Respond: SUFFICIENT or INSUFFICIENT [reason]"""
-        
+        prompt = self._format_coverage_prompt(query, context)
         response = await self.llm.ainvoke(prompt)
-        result = response.content if hasattr(response, 'content') else str(response)
-        
-        sufficient = "SUFFICIENT" in result and "INSUFFICIENT" not in result
+        result = response.content if hasattr(response, "content") else str(response)
+
+        sufficient = "SUFFICIENT" in result and "INSUFFICIENT" not in result.upper()
         
         return {
             "sufficient": sufficient,
@@ -174,14 +157,13 @@ Respond: SUFFICIENT or INSUFFICIENT [reason]"""
     async def _refine_query(self, original: str, context: str, coverage: Dict) -> Dict[str, Any]:
         """Refine query to improve retrieval"""
         
-        chain = self.query_refine_template | self.llm
-        response = await chain.ainvoke({
-            "query": original,
-            "retrieved": context[:300],
-            "coverage": coverage["reason"]
-        })
-        
-        result = response.content if hasattr(response, 'content') else str(response)
+        prompt = self._format_refine_prompt(
+            original=original,
+            retrieved=context[:300],
+            coverage=coverage.get("reason", ""),
+        )
+        response = await self.llm.ainvoke(prompt)
+        result = response.content if hasattr(response, "content") else str(response)
         
         if "SUFFICIENT" in result:
             return {"action": "SUFFICIENT"}
@@ -202,12 +184,50 @@ Respond: SUFFICIENT or INSUFFICIENT [reason]"""
     def add_documents(self, documents: List[str], metadata: Optional[List[Dict]] = None):
         """Add documents to vector store"""
         
-        # Split documents
+        if not self.vectorstore:
+            raise RuntimeError("Vector store is not initialized")
+
         splits = []
-        for doc in documents:
+        for doc in documents or []:
             splits.extend(self.splitter.split_text(doc))
-        
-        # Add to vectorstore
-        self.vectorstore.add_texts(splits, metadatas=metadata)
-        
+
+        if not splits:
+            return
+
+        metadatas = metadata or [{} for _ in splits]
+        if len(metadatas) != len(splits):
+            if len(metadatas) < len(splits):
+                metadatas = metadatas + ([{}] * (len(splits) - len(metadatas)))
+            else:
+                metadatas = metadatas[: len(splits)]
+
+        self.vectorstore.add_texts(splits, metadatas=metadatas)
+
         logger.info(f"Added {len(splits)} chunks to knowledge base")
+
+    # Prompt helpers
+    def _format_synthesis_prompt(self, query: str, context: str) -> str:
+        return f"""Synthesize retrieved information to answer the query.
+
+Query: {query}
+Context:
+{context}
+
+Answer:"""
+
+    def _format_refine_prompt(self, original: str, retrieved: str, coverage: str) -> str:
+        return f"""Analyze the query and retrieved context. If gaps exist, reformulate the query to get better results.
+
+Query: {original}
+Retrieved: {retrieved}
+Coverage: {coverage}
+
+Should we search again? If yes, provide refined query. If no, say SUFFICIENT."""
+
+    def _format_coverage_prompt(self, query: str, context: str) -> str:
+        return f"""Does this context sufficiently answer the query?
+
+Query: {query}
+Context: {context[:500]}...
+
+Respond: SUFFICIENT or INSUFFICIENT [reason]"""
