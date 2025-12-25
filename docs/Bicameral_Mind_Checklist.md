@@ -2,6 +2,39 @@
 
 Last Updated: December 25, 2025
 
+## Recent Work Completed (December 25, 2025)
+
+### Critical Gaps Resolved
+1. **✅ Bullets Not Retrieved During Generation** - FIXED
+   - Created bullet_formatter.py
+   - Rewrote LeftBrain/RightBrain agents to retrieve bullets
+   - Bullets now properly injected into LLM context
+   - Tests passing (test_bullet_integration.py)
+
+2. **✅ Hemisphere Assignment Based on Executor** - FIXED
+   - Meta-bullets installed (25 patterns)
+   - HemisphereClassifier integrated into curator
+   - Classification by cognitive style, not executor
+   - Auto-assignment enabled (config)
+
+3. **🚧 Questions Not Implemented** - PARTIALLY FIXED
+   - QUESTION bullet type added
+   - Formatter updated
+   - Question logic pending
+
+### Phase 4.5 Complete
+- Meta-bullet system operational
+- Hemisphere classification working
+- Staging + auto-assignment functional
+- Tests: test_phase45_classification.py passing
+
+### Integration Testing
+- End-to-end learning cycle test created
+- Complete flow verified: query → retrieval → generation → learning → classification
+- test_end_to_end_integration.py passing
+
+---
+
 ## Legend
 - ✅ = Complete and tested
 - 🚧 = In progress
@@ -169,16 +202,15 @@ Last Updated: December 25, 2025
 - ✅ Design document created (STAGING_AREA_DESIGN.md)
 - ✅ procedural_staging collection implementation
 - ✅ Staging API methods (add, assign, reject)
-- ✅ Auto-assignment workflow (classifier-driven; meta-bullets installed)
-- ⏸️ Manual review UI (basic table added; full workflow deferred to Phase 5)
+- ✅ Auto-assignment workflow (classifier-driven; meta-bullets must be installed)
+- ⏸️ Manual review UI (basic table added in UI; full workflow deferred)
 
 ### Integration Points
 - ✅ Curator sends insights to staging (not directly to hemispheres)
 - ✅ Classifier runs on staged bullets
 - ✅ High-confidence auto-assignment (>0.85)
 - ✅ Low-confidence manual review flagging (<0.85)
-- ✅ Config: staging.auto_assign = true (December 25, 2025)
-- ✅ Tests: test_phase45_classification.py passing
+- ⏸️ Meta-bullets not auto-installed (needs explicit seeding step)
 
 **Critical Gap #2 RESOLVED**: Bullets now classified by cognitive style (content), not executor
 
@@ -195,7 +227,7 @@ Last Updated: December 25, 2025
 
 ### Dashboard Component (Phase B)
 - ✅ System status panel (mode, tick rate, health)
-- ✅ Memory metrics display (L/R/S counts)
+- ✅ Memory metrics display (L/R/S/Staging counts)
 - ⏸️ Hemisphere activity graphs (deferred)
 - ⏸️ Consciousness tick tracking (basic version complete)
 - ⏸️ Learning analytics display (deferred)
@@ -208,19 +240,20 @@ Last Updated: December 25, 2025
 - ⏸️ Bullet suggestion and curation UI (deferred)
 - ✅ Basic conversation analytics (mode, tick, hemisphere)
 
-### MCP Tool Monitor (Phase D)
+### Tool Monitor (Phase D)
 - ✅ Server registry display
-- ✅ Tool execution log (basic)
-- ⏸️ Tool configuration UI (deferred)
+- ✅ Tool registry list/search (UI + API)
+- ⏸️ Tool execution log (placeholder; no live events wired)
+- ⏸️ Tool configuration UI (beyond enable/disable)
 - ⏸️ Learning analytics for tools (deferred)
 - ⏸️ Visual tool flow (deferred)
 
 ### Staging Review Queue (Phase D2) - NEW
-- ✅ Bullet review queue page (basic)
-- ⏸️ Staged bullets table with classification suggestions
+- ✅ Bullet review queue page (basic table, assign/reject)
+- ⏸️ Classification suggestion surfacing in UI
 - ⏸️ Detail modal for flagged bullets
 - ⏸️ Bulk assignment actions
-- ⏸️ Manual review workflow
+- ⏸️ Manual review workflow polish
 
 ### Backend API
 - ✅ REST API endpoints (chat, system status, MCP servers)
