@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from .bullet import Bullet
-from .procedural_store import ProceduralStore
+from .procedural_store import ProceduralMemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ class Deduplicator:
 
     def __init__(
         self,
-        store: ProceduralStore,
+        store: ProceduralMemoryStore,
         config: Optional[Dict[str, Any]] = None
     ):
         """
@@ -156,25 +156,31 @@ class Deduplicator:
 
     def _get_all_bullets(self, collection_name: str) -> List[Bullet]:
         """Get all bullets from collection"""
-        result = self.store.query(
-            collection_name=collection_name,
-            query_texts=[""],  # Empty query to get all
-            n_results=10000,  # Large number to get all
-        )
+        # Convert collection_name to side (e.g., "procedural_left" -> "left")
+        side = collection_name.replace("procedural_", "")
 
-        if not result or not result.get("ids"):
-            return []
+        # Get bullets using the store's list_bullets method
+        procedural_bullets = self.store.list_bullets(side=side, limit=10000, include_deprecated=True)
+
+        # Convert ProceduralBullet to Bullet
+        from .bullet import BulletType, BulletStatus, Hemisphere
 
         bullets = []
-        for i in range(len(result["ids"])):
-            metadata = result["metadatas"][i] if result.get("metadatas") else {}
-
-            # Reconstruct bullet from metadata
-            bullet = self._metadata_to_bullet(
-                bullet_id=result["ids"][i],
-                text=result["documents"][i],
-                metadata=metadata,
-                embedding=result["embeddings"][i] if result.get("embeddings") else None
+        for pb in procedural_bullets:
+            bullet = Bullet(
+                id=pb.id,
+                text=pb.text,
+                side=Hemisphere(pb.side),
+                type=BulletType(pb.type),
+                tags=pb.tags or [],
+                status=BulletStatus(pb.status),
+                confidence=pb.confidence,
+                helpful_count=pb.helpful_count,
+                harmful_count=pb.harmful_count,
+                created_at=datetime.fromisoformat(pb.created_at.replace("Z", "+00:00")) if pb.created_at else datetime.now(),
+                last_used_at=datetime.fromisoformat(pb.last_used_at.replace("Z", "+00:00")) if pb.last_used_at else None,
+                source_trace_id=pb.source_trace_id,
+                metadata=pb.metadata or {}
             )
             bullets.append(bullet)
 
@@ -184,23 +190,28 @@ class Deduplicator:
         self, collection_name: str, bullet_ids: List[str]
     ) -> List[Bullet]:
         """Get specific bullets by IDs"""
-        result = self.store.get(
-            collection_name=collection_name,
-            ids=bullet_ids
-        )
+        # Get bullets using the store's get_bullets_by_ids method
+        procedural_bullets = self.store.get_bullets_by_ids(bullet_ids=bullet_ids)
 
-        if not result or not result.get("ids"):
-            return []
+        # Convert ProceduralBullet to Bullet
+        from .bullet import BulletType, BulletStatus, Hemisphere
 
         bullets = []
-        for i in range(len(result["ids"])):
-            metadata = result["metadatas"][i] if result.get("metadatas") else {}
-
-            bullet = self._metadata_to_bullet(
-                bullet_id=result["ids"][i],
-                text=result["documents"][i],
-                metadata=metadata,
-                embedding=result["embeddings"][i] if result.get("embeddings") else None
+        for pb in procedural_bullets:
+            bullet = Bullet(
+                id=pb.id,
+                text=pb.text,
+                side=Hemisphere(pb.side),
+                type=BulletType(pb.type),
+                tags=pb.tags or [],
+                status=BulletStatus(pb.status),
+                confidence=pb.confidence,
+                helpful_count=pb.helpful_count,
+                harmful_count=pb.harmful_count,
+                created_at=datetime.fromisoformat(pb.created_at.replace("Z", "+00:00")) if pb.created_at else datetime.now(),
+                last_used_at=datetime.fromisoformat(pb.last_used_at.replace("Z", "+00:00")) if pb.last_used_at else None,
+                source_trace_id=pb.source_trace_id,
+                metadata=pb.metadata or {}
             )
             bullets.append(bullet)
 
@@ -239,19 +250,9 @@ class Deduplicator:
 
     def _get_embeddings(self, bullets: List[Bullet]) -> np.ndarray:
         """Get embeddings for bullets"""
-        # For bullets that already have embeddings stored
-        embeddings = []
-
-        for bullet in bullets:
-            if hasattr(bullet, '_embedding') and bullet._embedding:
-                embeddings.append(bullet._embedding)
-            else:
-                # Need to get embedding from store
-                # This is a fallback - embeddings should be stored
-                logger.warning(f"Bullet {bullet.id} missing embedding, using text hash")
-                # Use a simple hash-based embedding as fallback
-                embeddings.append(self._text_to_simple_embedding(bullet.text))
-
+        # Use the store's embedding function to generate embeddings
+        texts = [bullet.text for bullet in bullets]
+        embeddings = self.store._embed(texts)
         return np.array(embeddings)
 
     def _text_to_simple_embedding(self, text: str) -> List[float]:

@@ -3,8 +3,8 @@ import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.memory import (
     ProceduralMemory,
@@ -38,7 +38,7 @@ def create_test_bullets():
         id="test_1",
         text="Always validate user input before processing",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["validation"],
         confidence=0.8,
         helpful_count=5,
@@ -50,7 +50,7 @@ def create_test_bullets():
         id="test_2",
         text="Validate user input before processing data",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["validation", "input"],
         confidence=0.7,
         helpful_count=3,
@@ -63,7 +63,7 @@ def create_test_bullets():
         id="test_3",
         text="Use try-except blocks for error handling",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["error_handling"],
         confidence=0.9,
         helpful_count=10,
@@ -75,7 +75,7 @@ def create_test_bullets():
         id="test_4",
         text="Always use try-except for error handling",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["error_handling", "best_practice"],
         confidence=0.85,
         helpful_count=7,
@@ -88,7 +88,7 @@ def create_test_bullets():
         id="test_5",
         text="This is a bad heuristic",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["bad"],
         confidence=0.3,
         helpful_count=0,
@@ -101,7 +101,7 @@ def create_test_bullets():
         id="test_6",
         text="Never used old bullet",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["unused"],
         confidence=0.5,
         helpful_count=0,
@@ -115,7 +115,7 @@ def create_test_bullets():
         id="test_7",
         text="Use type hints for better code clarity",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["typing", "best_practice"],
         confidence=0.95,
         helpful_count=15,
@@ -178,11 +178,16 @@ def test_2_deduplication():
     print(f"Adding {len(bullets)} test bullets...\n")
 
     for bullet in bullets:
-        memory.store.add(
-            collection_name="procedural_left",
-            ids=[bullet.id],
-            documents=[bullet.text],
-            metadatas=[bullet.to_metadata()]
+        memory.store.add_bullet(
+            side=bullet.side.value,
+            text=bullet.text,
+            bullet_type=bullet.type.value,
+            tags=bullet.tags,
+            status=bullet.status.value,
+            confidence=bullet.confidence,
+            source_trace_id=bullet.source_trace_id,
+            metadata=bullet.metadata,
+            bullet_id=bullet.id
         )
 
     # Initialize deduplicator
@@ -224,11 +229,16 @@ def test_3_pruning():
     print(f"Adding {len(bullets)} test bullets...\n")
 
     for bullet in bullets:
-        memory.store.add(
-            collection_name="procedural_left",
-            ids=[bullet.id],
-            documents=[bullet.text],
-            metadatas=[bullet.to_metadata()]
+        memory.store.add_bullet(
+            side=bullet.side.value,
+            text=bullet.text,
+            bullet_type=bullet.type.value,
+            tags=bullet.tags,
+            status=bullet.status.value,
+            confidence=bullet.confidence,
+            source_trace_id=bullet.source_trace_id,
+            metadata=bullet.metadata,
+            bullet_id=bullet.id
         )
 
     # Initialize analyzer and pruner
@@ -278,7 +288,7 @@ def test_4_backup_and_recovery():
         id="backup_test_1",
         text="Test bullet for backup",
         side=Hemisphere.LEFT,
-        bullet_type=BulletType.HEURISTIC,
+        type=BulletType.HEURISTIC,
         tags=["test"],
         confidence=0.5,
         helpful_count=0,
@@ -287,11 +297,16 @@ def test_4_backup_and_recovery():
         created_at=datetime.now() - timedelta(days=30),
     )
 
-    memory.store.add(
-        collection_name="procedural_left",
-        ids=[bullet.id],
-        documents=[bullet.text],
-        metadatas=[bullet.to_metadata()]
+    memory.store.add_bullet(
+        side=bullet.side.value,
+        text=bullet.text,
+        bullet_type=bullet.type.value,
+        tags=bullet.tags,
+        status=bullet.status.value,
+        confidence=bullet.confidence,
+        source_trace_id=bullet.source_trace_id,
+        metadata=bullet.metadata,
+        bullet_id=bullet.id
     )
 
     print("Added test bullet")
@@ -378,11 +393,16 @@ def test_6_high_level_api():
     bullets = create_test_bullets()
 
     for bullet in bullets:
-        memory.store.add(
-            collection_name="procedural_left",
-            ids=[bullet.id],
-            documents=[bullet.text],
-            metadatas=[bullet.to_metadata()]
+        memory.store.add_bullet(
+            side=bullet.side.value,
+            text=bullet.text,
+            bullet_type=bullet.type.value,
+            tags=bullet.tags,
+            status=bullet.status.value,
+            confidence=bullet.confidence,
+            source_trace_id=bullet.source_trace_id,
+            metadata=bullet.metadata,
+            bullet_id=bullet.id
         )
 
     print("Testing high-level maintenance API...\n")

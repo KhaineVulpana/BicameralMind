@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from .bullet import Bullet
-from .procedural_store import ProceduralStore
+from .procedural_store import ProceduralMemoryStore
 from .quality_analyzer import QualityAnalyzer, PrunePolicy, QualityMetrics, PruneReason
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class Pruner:
 
     def __init__(
         self,
-        store: ProceduralStore,
+        store: ProceduralMemoryStore,
         analyzer: QualityAnalyzer,
         config: Optional[Dict[str, Any]] = None
     ):
@@ -58,7 +58,7 @@ class Pruner:
         Initialize pruner
 
         Args:
-            store: ProceduralStore instance
+            store: ProceduralMemoryStore instance
             analyzer: QualityAnalyzer instance
             config: Configuration dict
         """
@@ -203,23 +203,31 @@ class Pruner:
 
     def _get_all_bullets(self, collection_name: str) -> List[Bullet]:
         """Get all bullets from collection"""
-        result = self.store.query(
-            collection_name=collection_name,
-            query_texts=[""],
-            n_results=10000
-        )
+        # Convert collection_name to side (e.g., "procedural_left" -> "left")
+        side = collection_name.replace("procedural_", "")
 
-        if not result or not result.get("ids"):
-            return []
+        # Get bullets using the store's list_bullets method
+        procedural_bullets = self.store.list_bullets(side=side, limit=10000, include_deprecated=True)
+
+        # Convert ProceduralBullet to Bullet
+        from .bullet import BulletType, BulletStatus, Hemisphere
 
         bullets = []
-        for i in range(len(result["ids"])):
-            metadata = result["metadatas"][i] if result.get("metadatas") else {}
-
-            bullet = self._metadata_to_bullet(
-                bullet_id=result["ids"][i],
-                text=result["documents"][i],
-                metadata=metadata
+        for pb in procedural_bullets:
+            bullet = Bullet(
+                id=pb.id,
+                text=pb.text,
+                side=Hemisphere(pb.side),
+                type=BulletType(pb.type),
+                tags=pb.tags or [],
+                status=BulletStatus(pb.status),
+                confidence=pb.confidence,
+                helpful_count=pb.helpful_count,
+                harmful_count=pb.harmful_count,
+                created_at=datetime.fromisoformat(pb.created_at.replace("Z", "+00:00")) if pb.created_at else datetime.now(),
+                last_used_at=datetime.fromisoformat(pb.last_used_at.replace("Z", "+00:00")) if pb.last_used_at else None,
+                source_trace_id=pb.source_trace_id,
+                metadata=pb.metadata or {}
             )
             bullets.append(bullet)
 
@@ -238,7 +246,7 @@ class Pruner:
             id=bullet_id,
             text=text,
             side=Hemisphere(metadata.get("side", "left")),
-            bullet_type=BulletType(metadata.get("type", "heuristic")),
+            type=BulletType(metadata.get("type", "heuristic")),
             tags=metadata.get("tags", []),
             confidence=metadata.get("confidence", 0.5),
             helpful_count=metadata.get("helpful_count", 0),
@@ -287,10 +295,11 @@ class Pruner:
 
         bullet_ids = [b.id for b in bullets]
 
-        self.store.delete(
-            collection_name=collection_name,
-            ids=bullet_ids
-        )
+        # Convert collection_name to side and delete directly from ChromaDB collection
+        side = collection_name.replace("procedural_", "")
+        if side in self.store._collections:
+            collection = self.store._collections[side]
+            collection.delete(ids=bullet_ids)
 
         return len(bullets)
 

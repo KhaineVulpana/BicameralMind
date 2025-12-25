@@ -161,7 +161,16 @@ class QualityAnalyzer:
 
     def _calculate_age_days(self, bullet: Bullet) -> int:
         """Calculate bullet age in days"""
-        return (datetime.now() - bullet.created_at).days
+        # Handle both timezone-aware and naive datetimes
+        now = datetime.now()
+        if bullet.created_at.tzinfo is not None:
+            # created_at is timezone-aware, make now aware too
+            from datetime import timezone
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            created_at = bullet.created_at.replace(tzinfo=None)
+        else:
+            created_at = bullet.created_at
+        return (now - created_at).days
 
     def _calculate_quality_score(self, bullet: Bullet) -> float:
         """

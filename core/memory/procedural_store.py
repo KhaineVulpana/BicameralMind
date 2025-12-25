@@ -378,11 +378,17 @@ class ProceduralMemoryStore:
         if side not in self._collections:
             raise ValueError(f"Invalid side '{side}'")
         col = self._collections[side]
-        where = {} if include_deprecated else {"status": {"$ne": "deprecated"}}
-        try:
-            res = col.get(include=["documents", "metadatas"], limit=limit, where=where)
-        except TypeError:
+
+        # ChromaDB doesn't accept empty where clause, so only pass it if we have a filter
+        if include_deprecated:
             res = col.get(include=["documents", "metadatas"], limit=limit)
+        else:
+            where = {"status": {"$ne": "deprecated"}}
+            try:
+                res = col.get(include=["documents", "metadatas"], limit=limit, where=where)
+            except (TypeError, ValueError):
+                # Fallback if where clause not supported
+                res = col.get(include=["documents", "metadatas"], limit=limit)
         ids = res.get("ids", [])
         docs = res.get("documents", [])
         metas = res.get("metadatas", [])

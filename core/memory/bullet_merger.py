@@ -6,7 +6,7 @@ from datetime import datetime
 import json
 
 from .bullet import Bullet
-from .procedural_store import ProceduralStore
+from .procedural_store import ProceduralMemoryStore
 from .deduplicator import DuplicateCluster
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class BulletMerger:
 
     def __init__(
         self,
-        store: ProceduralStore,
+        store: ProceduralMemoryStore,
         config: Optional[Dict[str, Any]] = None
     ):
         """
@@ -106,19 +106,23 @@ class BulletMerger:
                 archived_ids.append(bullet.id)
 
         # Update primary bullet in store
-        self.store.update(
-            collection_name=collection_name,
-            ids=[merged_bullet.id],
-            documents=[merged_bullet.text],
-            metadatas=[merged_bullet.to_metadata()]
-        )
+        # Convert collection_name to side and update directly via ChromaDB collection
+        side = collection_name.replace("procedural_", "")
+        if side in self.store._collections:
+            collection = self.store._collections[side]
+            # Get embedding for the merged bullet text
+            embedding = self.store._embed([merged_bullet.text])[0]
+            collection.update(
+                ids=[merged_bullet.id],
+                documents=[merged_bullet.text],
+                embeddings=[embedding],
+                metadatas=[merged_bullet.to_metadata()]
+            )
 
         # Delete secondary bullets from store
-        if archived_ids:
-            self.store.delete(
-                collection_name=collection_name,
-                ids=archived_ids
-            )
+        if archived_ids and side in self.store._collections:
+            collection = self.store._collections[side]
+            collection.delete(ids=archived_ids)
 
         # Record merge history
         merge_history = MergeHistory(
