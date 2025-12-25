@@ -20,6 +20,7 @@ class MCPLearningResult:
     trace: Any  # ExecutionTrace
     learning_result: Any  # LearningResult
     tick_rate: float
+    context: Optional[ToolExecutionContext] = None
     bullets_updated: List[str] = field(default_factory=list)
     insights_extracted: int = 0
 
@@ -172,6 +173,7 @@ class MCPLearningIntegration:
             trace=trace,
             learning_result=learning_result,
             tick_rate=tick_rate,
+            context=execution_result.context,
             bullets_updated=bullets_updated,
             insights_extracted=learning_result.insights_extracted if learning_result else 0,
         )

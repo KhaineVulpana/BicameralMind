@@ -144,6 +144,9 @@ Last Updated: December 24, 2025
 - [core/meta_controller/exploration_policy.py](../core/meta_controller/exploration_policy.py) - Forced exploration policy
 - [tests/test_phase6_cross_hemisphere_learning.py](../tests/test_phase6_cross_hemisphere_learning.py) - Phase 6 tests
 - [tests/test_phase6_forced_exploration.py](../tests/test_phase6_forced_exploration.py) - Forced exploration tests
+- ?o. `tests/test_meta_controller_novelty.py` - MetaController novelty integration helpers
+- ?o. `tests/test_suggestion_delivery.py` - Suggestion delivery pipeline
+- ?o. `tests/test_api_smoke.py` - FastAPI endpoint smoke tests
 
 **Files Modified**:
 - [core/memory/bullet.py](../core/memory/bullet.py) - Metadata fields for suggestions

@@ -1,7 +1,6 @@
 """FastAPI backend for BicameralMind UI"""
 import webbrowser
 import asyncio
-import yaml
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -18,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Try to import, but don't fail if not available
 try:
     from core.bicameral_mind import BicameralMind
-    from config.config_loader import load_config
+    from config.config_loader import load_config, save_config
     BICAMERAL_AVAILABLE = True
 except ImportError as e:
     print(f"[WARN] BicameralMind import failed: {e}")
@@ -26,6 +25,7 @@ except ImportError as e:
     BICAMERAL_AVAILABLE = False
     BicameralMind = None
     load_config = None
+    save_config = None
 
 app = FastAPI(title="BicameralMind UI")
 
@@ -40,6 +40,7 @@ app.add_middleware(
 
 # Global state
 bicameral_mind: Optional[BicameralMind] = None
+procedural_memory = None
 active_connections: list[WebSocket] = []
 
 # Serve static files
@@ -51,6 +52,30 @@ if static_dir.exists():
 # Request models
 class ChatMessage(BaseModel):
     text: str
+    mode: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
+class MCPServerModel(BaseModel):
+    name: str
+    type: str = "stdio"
+    command: str
+    args: list[str] = []
+    enabled: bool = True
+    description: str = ""
+    category: str = "other"
+    env: Optional[dict] = None
+
+
+class MCPServerUpdate(BaseModel):
+    type: Optional[str] = None
+    command: Optional[str] = None
+    args: Optional[list[str]] = None
+    enabled: Optional[bool] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    env: Optional[dict] = None
 
 
 @app.on_event("startup")
@@ -69,6 +94,8 @@ async def startup():
 
         # Initialize bicameral mind
         bicameral_mind = BicameralMind(config)
+        global procedural_memory
+        procedural_memory = getattr(bicameral_mind, "memory", None)
 
         print("[OK] BicameralMind initialized")
     except Exception as e:
@@ -95,35 +122,30 @@ async def get_status():
             "mode": "offline",
             "tick_rate": 0.0,
             "hemisphere": "none",
-            "memory": {"left": 0, "right": 0, "shared": 0}
+            "memory": {"left": 0, "right": 0, "shared": 0},
+            "model": "offline",
+            "health": "OFFLINE"
         }
 
     try:
-        # Get memory counts
-        memory_left = len(bicameral_mind.memory.store.get(
-            collection_name="procedural_left",
-            include=["metadatas"]
-        )["metadatas"] or [])
-
-        memory_right = len(bicameral_mind.memory.store.get(
-            collection_name="procedural_right",
-            include=["metadatas"]
-        )["metadatas"] or [])
-
-        memory_shared = len(bicameral_mind.memory.store.get(
-            collection_name="procedural_shared",
-            include=["metadatas"]
-        )["metadatas"] or [])
+        stats = None
+        if procedural_memory:
+            stats = procedural_memory.get_stats().get("collections", {})
+        memory_left = stats.get("left", {}).get("count", 0) if stats else 0
+        memory_right = stats.get("right", {}).get("count", 0) if stats else 0
+        memory_shared = stats.get("shared", {}).get("count", 0) if stats else 0
 
         return {
-            "mode": bicameral_mind.meta_controller.current_mode.value,
-            "tick_rate": bicameral_mind.meta_controller.consciousness_tick,
-            "hemisphere": bicameral_mind.meta_controller.active_hemisphere,
+            "mode": bicameral_mind.meta_controller.mode.value,
+            "tick_rate": bicameral_mind.meta_controller.get_tick_rate(),
+            "hemisphere": bicameral_mind.meta_controller.get_active_hemisphere() or "none",
             "memory": {
                 "left": memory_left,
                 "right": memory_right,
                 "shared": memory_shared
-            }
+            },
+            "model": bicameral_mind.config.get("model", {}).get("name", "unknown"),
+            "health": "OK"
         }
     except Exception as e:
         print(f"[ERROR] Status error: {e}")
@@ -131,8 +153,71 @@ async def get_status():
             "mode": "error",
             "tick_rate": 0.0,
             "hemisphere": "none",
-            "memory": {"left": 0, "right": 0, "shared": 0}
+            "memory": {"left": 0, "right": 0, "shared": 0},
+            "model": "unknown",
+            "health": "ERROR"
         }
+
+
+@app.get("/api/memory/stats")
+async def get_memory_stats():
+    """Return procedural memory statistics."""
+    if not procedural_memory or not getattr(procedural_memory, "enabled", False):
+        return {"enabled": False, "collections": {}, "status": {}}
+    try:
+        stats = procedural_memory.get_stats()
+        status_keys = ("active", "quarantined", "deprecated", "unknown")
+        total_counts = {key: 0 for key in status_keys}
+        by_side: dict[str, dict[str, int]] = {}
+        for side in ("left", "right", "shared"):
+            side_counts = {key: 0 for key in status_keys}
+            try:
+                bullets = procedural_memory.store.list_bullets(side, limit=10000, include_deprecated=True)
+            except Exception:
+                bullets = []
+            for bullet in bullets:
+                status = (bullet.status or "active").lower()
+                if status not in side_counts:
+                    status = "unknown"
+                side_counts[status] += 1
+                total_counts[status] += 1
+            by_side[side] = side_counts
+        stats["status"] = {
+            "total": total_counts,
+            "by_side": by_side
+        }
+        return stats
+    except Exception as e:
+        print(f"[ERROR] Memory stats error: {e}")
+        return {"enabled": False, "collections": {}, "status": {}}
+
+
+@app.get("/api/memory/bullets")
+async def get_memory_bullets(hemisphere: str = "shared", limit: int = 25):
+    """Return a list of procedural bullets for a hemisphere."""
+    if not procedural_memory:
+        return {"bullets": []}
+    try:
+        raw = procedural_memory.store.list_bullets(hemisphere, limit=limit)
+        bullets = []
+        for item in raw:
+            bullet = procedural_memory._convert_bullet(item)
+            bullets.append({
+                "id": bullet.id,
+                "text": bullet.text,
+                "side": bullet.side.value,
+                "type": bullet.type.value,
+                "tags": bullet.tags,
+                "status": bullet.status.value,
+                "confidence": bullet.confidence,
+                "helpful_count": bullet.helpful_count,
+                "harmful_count": bullet.harmful_count,
+                "score": bullet.score(),
+            })
+        return {"bullets": bullets}
+    except Exception as e:
+        print(f"[ERROR] Memory bullet error: {e}")
+        return {"bullets": []}
 
 
 @app.post("/api/chat/message")
@@ -151,7 +236,7 @@ async def send_message(message: ChatMessage):
 
     try:
         # Process through bicameral mind
-        response = await bicameral_mind.process_input(message.text)
+        response = await bicameral_mind.process(message.text)
 
         # Broadcast to WebSocket clients
         await broadcast({
@@ -159,12 +244,13 @@ async def send_message(message: ChatMessage):
             "message": response
         })
 
+        response_payload = response if isinstance(response, dict) else {}
         return {
-            "response": response,
-            "mode": bicameral_mind.meta_controller.current_mode.value,
-            "tick_rate": bicameral_mind.meta_controller.consciousness_tick,
-            "hemisphere": bicameral_mind.meta_controller.active_hemisphere,
-            "bullets_used": 0  # TODO: Track bullets used
+            "response": response_payload.get("output", response),
+            "mode": bicameral_mind.meta_controller.mode.value,
+            "tick_rate": bicameral_mind.meta_controller.get_tick_rate(),
+            "hemisphere": response_payload.get("hemisphere", bicameral_mind.meta_controller.get_active_hemisphere()),
+            "bullets_used": 0
         }
     except Exception as e:
         print(f"[ERROR] Chat error: {e}")
@@ -189,9 +275,7 @@ async def get_mcp_servers():
         return {"servers": []}
 
     try:
-        import yaml
-        with open(config_file, 'r') as f:
-            config = yaml.safe_load(f)
+        config = load_config(str(config_file)) if load_config else {}
 
         servers = config.get('mcp', {}).get('servers', [])
 
@@ -201,6 +285,7 @@ async def get_mcp_servers():
             result.append({
                 "name": server['name'],
                 "status": "connected" if server.get('enabled') else "disabled",
+                "enabled": bool(server.get('enabled')),
                 "tools": 0,  # TODO: Get actual tool count
                 "description": server.get('description', ''),
                 "category": server.get('category', 'other')
@@ -212,16 +297,110 @@ async def get_mcp_servers():
         return {"servers": []}
 
 
+@app.get("/api/mcp/servers/{server_name}")
+async def get_mcp_server(server_name: str):
+    """Return MCP server details."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    try:
+        config = load_config(str(config_file)) if load_config else {}
+        servers = config.get("mcp", {}).get("servers", [])
+        for server in servers:
+            if server.get("name") == server_name:
+                return {
+                    "name": server.get("name"),
+                    "type": server.get("type", "stdio"),
+                    "command": server.get("command", ""),
+                    "args": server.get("args", []),
+                    "enabled": bool(server.get("enabled", False)),
+                    "description": server.get("description", ""),
+                    "category": server.get("category", "other"),
+                    "env": server.get("env", {}),
+                }
+        return {"error": "not_found"}
+    except Exception as e:
+        print(f"[ERROR] MCP server detail error: {e}")
+        return {"error": "failed"}
+
+
+@app.post("/api/mcp/servers")
+async def add_mcp_server(server: MCPServerModel):
+    """Add a new MCP server to config."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    try:
+        config = load_config(str(config_file)) if load_config else {}
+        config.setdefault("mcp", {})
+        servers = config["mcp"].setdefault("servers", [])
+        if any(s.get("name") == server.name for s in servers):
+            return {"status": "exists"}
+        servers.append({
+            "name": server.name,
+            "type": server.type,
+            "command": server.command,
+            "args": server.args,
+            "enabled": server.enabled,
+            "description": server.description,
+            "category": server.category,
+            "env": server.env or {},
+        })
+        if save_config:
+            save_config(config, str(config_file))
+        return {"status": "success"}
+    except Exception as e:
+        print(f"[ERROR] MCP add server error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.patch("/api/mcp/servers/{server_name}")
+async def update_mcp_server(server_name: str, update: MCPServerUpdate):
+    """Update MCP server configuration."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    try:
+        config = load_config(str(config_file)) if load_config else {}
+        servers = config.get("mcp", {}).get("servers", [])
+        updated = False
+        for server in servers:
+            if server.get("name") != server_name:
+                continue
+            for key, value in update.model_dump(exclude_unset=True).items():
+                if value is None:
+                    continue
+                server[key] = value
+            updated = True
+            break
+        if updated and save_config:
+            save_config(config, str(config_file))
+        return {"status": "success" if updated else "not_found"}
+    except Exception as e:
+        print(f"[ERROR] MCP update server error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@app.delete("/api/mcp/servers/{server_name}")
+async def delete_mcp_server(server_name: str):
+    """Remove an MCP server from config."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    try:
+        config = load_config(str(config_file)) if load_config else {}
+        servers = config.get("mcp", {}).get("servers", [])
+        filtered = [s for s in servers if s.get("name") != server_name]
+        if len(filtered) == len(servers):
+            return {"status": "not_found"}
+        config["mcp"]["servers"] = filtered
+        if save_config:
+            save_config(config, str(config_file))
+        return {"status": "success"}
+    except Exception as e:
+        print(f"[ERROR] MCP delete server error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 @app.get("/api/mcp/config")
 async def get_mcp_config():
     """Get current MCP configuration"""
     config_file = Path(__file__).parent.parent / "config" / "config.yaml"
 
     try:
-        import yaml
-        with open(config_file, 'r') as f:
-            config = yaml.safe_load(f)
-
+        config = load_config(str(config_file)) if load_config else {}
         servers = config.get('mcp', {}).get('servers', [])
         return {"servers": servers}
     except Exception as e:
@@ -235,11 +414,8 @@ async def update_mcp_config(config_update: dict):
     config_file = Path(__file__).parent.parent / "config" / "config.yaml"
 
     try:
-        import yaml
-
         # Load current config
-        with open(config_file, 'r') as f:
-            config = yaml.safe_load(f)
+        config = load_config(str(config_file)) if load_config else {}
 
         # Update server enabled states
         servers = config.get('mcp', {}).get('servers', [])
@@ -263,8 +439,8 @@ async def update_mcp_config(config_update: dict):
                     server['env'][token_name] = config_update[server_name]['token']
 
         # Write back to config
-        with open(config_file, 'w') as f:
-            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        if save_config:
+            save_config(config, str(config_file))
 
         print("[INFO] MCP configuration updated")
         return {"status": "success"}
@@ -287,8 +463,8 @@ async def websocket_endpoint(websocket: WebSocket):
         if bicameral_mind:
             await websocket.send_json({
                 "type": "status_update",
-                "mode": bicameral_mind.meta_controller.current_mode.value,
-                "tick_rate": bicameral_mind.meta_controller.consciousness_tick
+                "mode": bicameral_mind.meta_controller.mode.value,
+                "tick_rate": bicameral_mind.meta_controller.get_tick_rate()
             })
 
         # Keep connection alive and send periodic updates
@@ -298,8 +474,8 @@ async def websocket_endpoint(websocket: WebSocket):
             if bicameral_mind:
                 await websocket.send_json({
                     "type": "status_update",
-                    "mode": bicameral_mind.meta_controller.current_mode.value,
-                    "tick_rate": bicameral_mind.meta_controller.consciousness_tick
+                    "mode": bicameral_mind.meta_controller.mode.value,
+                    "tick_rate": bicameral_mind.meta_controller.get_tick_rate()
                 })
     except WebSocketDisconnect:
         active_connections.remove(websocket)

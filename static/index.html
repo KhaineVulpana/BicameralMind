@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -7,130 +7,529 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header class="app-header">
-            <div class="title-block">
-                <p class="eyebrow">BicameralMind Desktop UI</p>
-                <h1>Consciousness Console</h1>
-                <p class="subtitle">Live telemetry from the bicameral system, with conversation and tool monitoring in one view.</p>
+    <div class="app-shell">
+        <header class="top-bar">
+            <div class="brand">
+                <div class="brand-mark">BM</div>
+                <div class="brand-text">
+                    <p class="eyebrow">BicameralMind Desktop UI</p>
+                    <h1>Consciousness Console</h1>
+                    <p class="subtitle">Telemetry, learning, and tool orchestration for the bicameral system.</p>
+                </div>
             </div>
-            <div class="status-bar">
+            <div class="status-cluster">
                 <span id="status" class="status-pill">Status: LOADING...</span>
                 <span id="mode" class="status-pill">Mode: -</span>
                 <span id="tick" class="status-pill">Tick: -</span>
             </div>
         </header>
 
-        <!-- Three-column layout -->
-        <div class="main-content">
-            <!-- Left: Dashboard -->
-            <div class="panel dashboard">
-                <div class="panel-header">
-                    <div>
-                        <h2>System Overview</h2>
-                        <p class="panel-subtitle">Snapshot of memory, mode, and hemispheric focus.</p>
-                    </div>
-                    <span class="chip">Realtime</span>
-                </div>
-                <div class="stat-grid">
-                    <div class="stat-card">
-                        <span class="stat-label">Memory Footprint</span>
-                        <span id="memory" class="stat-value">L:- R:- S:-</span>
-                        <span class="stat-caption">Left / Right / Shared bullets</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">Mode</span>
-                        <span id="mode-detail" class="stat-value">-</span>
-                        <span class="stat-caption">Meta-controller state</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">Active Hemisphere</span>
-                        <span id="hemisphere" class="stat-value">-</span>
-                        <span class="stat-caption">Lead processing lane</span>
-                    </div>
-                </div>
-                <div class="signal-grid">
-                    <div class="signal-card">
-                        <span class="signal-label">Consciousness Velocity</span>
-                        <div class="signal-bar"><span style="width: 72%"></span></div>
-                        <span class="signal-meta">Tick cadence vs baseline</span>
-                    </div>
-                    <div class="signal-card">
-                        <span class="signal-label">Learning Momentum</span>
-                        <div class="signal-bar"><span style="width: 58%"></span></div>
-                        <span class="signal-meta">Recent insight density</span>
-                    </div>
-                </div>
-                <div class="sparkline-card">
-                    <div class="sparkline-header">
-                        <span>Tick Cadence</span>
-                        <span class="sparkline-meta">Last 5 minutes</span>
-                    </div>
-                    <div class="sparkline">
-                        <span></span><span></span><span></span><span></span><span></span>
-                        <span></span><span></span><span></span><span></span><span></span>
-                        <span></span><span></span><span></span><span></span><span></span>
-                    </div>
-                </div>
-            </div>
+        <nav class="tab-nav">
+            <button class="tab active" data-tab="dashboard">Dashboard</button>
+            <button class="tab" data-tab="chat">Chat</button>
+            <button class="tab" data-tab="mcp">MCP Tools</button>
+        </nav>
 
-            <!-- Center: Chat -->
-            <div class="panel chat-panel">
-                <div class="panel-header">
-                    <div>
-                        <h2>Conversation Stream</h2>
-                        <p class="panel-subtitle">Left + right responses with tick context.</p>
+        <main class="tab-panels">
+            <section id="tab-dashboard" class="tab-panel active">
+                <div class="dashboard-grid">
+                    <div class="panel system-panel wide">
+                        <div class="panel-header">
+                            <div>
+                                <h2>System Status</h2>
+                                <p class="panel-subtitle">Mode, tick cadence, and health indicators.</p>
+                            </div>
+                            <span class="chip">Realtime</span>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-card">
+                                <span class="metric-label">Active Mode</span>
+                                <span id="mode-detail" class="metric-value">-</span>
+                                <span class="metric-meta">Meta-controller</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Lead Hemisphere</span>
+                                <span id="hemisphere" class="metric-value">-</span>
+                                <span class="metric-meta">Control lane</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Tick Rate</span>
+                                <span id="tick-detail" class="metric-value">-</span>
+                                <span class="metric-meta">Ticks per second</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Model</span>
+                                <span id="model-name" class="metric-value">-</span>
+                                <span class="metric-meta">LLM runtime</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">System Health</span>
+                                <span id="system-health" class="metric-value">-</span>
+                                <span class="metric-meta">Service status</span>
+                            </div>
+                        </div>
+                        <div class="signal-grid">
+                            <div class="signal">
+                                <div class="signal-title">Consciousness Velocity</div>
+                                <div class="signal-bar"><span style="width: 68%"></span></div>
+                                <div class="signal-caption">Tick cadence vs baseline</div>
+                            </div>
+                            <div class="signal">
+                                <div class="signal-title">Novelty Pressure</div>
+                                <div class="signal-bar"><span style="width: 52%"></span></div>
+                                <div class="signal-caption">Surprise and anomaly load</div>
+                            </div>
+                            <div class="signal">
+                                <div class="signal-title">Conflict Ratio</div>
+                                <div class="signal-bar"><span style="width: 41%"></span></div>
+                                <div class="signal-caption">Left vs right disagreement</div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="chip secondary">Mode: Auto</div>
-                </div>
-                <div id="chat-messages" class="chat-messages">
-                    <div class="message system">
-                        <div class="text">BicameralMind ready. Type a message to begin.</div>
-                    </div>
-                </div>
-                <div class="chat-metrics">
-                    <div class="metric-pill">Tokens: <strong>0</strong></div>
-                    <div class="metric-pill">Bullets: <strong>0</strong></div>
-                    <div class="metric-pill">Ticks: <strong>0</strong></div>
-                </div>
-                <div class="chat-input">
-                    <input type="text" id="message-input" placeholder="Type your message..." autofocus>
-                    <button id="send-btn">Send</button>
-                </div>
-            </div>
 
-            <!-- Right: MCP Tools -->
-            <div class="panel mcp-panel">
-                <div class="panel-title-row">
-                    <div>
-                        <h2>MCP Tool Monitor</h2>
-                        <p class="panel-subtitle">Servers, executions, and live learning outcomes.</p>
+                    <div class="panel memory-panel">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Memory Metrics</h2>
+                                <p class="panel-subtitle">Procedural bullet counts and lifecycle status.</p>
+                            </div>
+                        </div>
+                        <div class="memory-grid">
+                            <div class="memory-card">
+                                <span class="metric-label">Left</span>
+                                <span id="memory-left" class="metric-value">-</span>
+                                <span class="metric-meta">Exploit rules</span>
+                            </div>
+                            <div class="memory-card">
+                                <span class="metric-label">Right</span>
+                                <span id="memory-right" class="metric-value">-</span>
+                                <span class="metric-meta">Explore heuristics</span>
+                            </div>
+                            <div class="memory-card">
+                                <span class="metric-label">Shared</span>
+                                <span id="memory-shared" class="metric-value">-</span>
+                                <span class="metric-meta">Consensus playbooks</span>
+                            </div>
+                        </div>
+                        <div class="status-grid">
+                            <div class="status-card">
+                                <span>Active</span>
+                                <strong id="memory-active">-</strong>
+                            </div>
+                            <div class="status-card">
+                                <span>Quarantined</span>
+                                <strong id="memory-quarantined">-</strong>
+                            </div>
+                            <div class="status-card">
+                                <span>Deprecated</span>
+                                <strong id="memory-deprecated">-</strong>
+                            </div>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="chart-header">Quality Distribution</div>
+                            <div class="bar-chart">
+                                <span style="height: 52%"></span>
+                                <span style="height: 68%"></span>
+                                <span style="height: 35%"></span>
+                                <span style="height: 78%"></span>
+                                <span style="height: 60%"></span>
+                                <span style="height: 42%"></span>
+                            </div>
+                        </div>
+                        <div class="list-block">
+                            <h3>Recent Promotions</h3>
+                            <div class="list">
+                                <div class="list-item">Awaiting new shared promotions.</div>
+                            </div>
+                        </div>
                     </div>
-                    <button class="config-btn" onclick="openMCPConfig()" title="Configure MCP Servers">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M8 3.5a.5.5 0 0 1 .5-.5h.5a.5.5 0 0 1 0 1h-.5a.5.5 0 0 1-.5-.5zm0 9a.5.5 0 0 1 .5-.5h.5a.5.5 0 0 1 0 1h-.5a.5.5 0 0 1-.5-.5z"/>
-                            <path d="M13.243 3.757a6 6 0 1 0 0 8.486l-.707-.707a5 5 0 1 1 0-7.072l.707-.707z"/>
-                            <path d="M10 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/>
-                        </svg>
-                    </button>
+
+                    <div class="panel activity-panel">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Hemisphere Activity</h2>
+                                <p class="panel-subtitle">Pattern recognition vs mutation intensity.</p>
+                            </div>
+                        </div>
+                        <div class="split-meters">
+                            <div class="meter">
+                                <span>Left Brain</span>
+                                <div class="meter-bar"><span style="width: 62%"></span></div>
+                                <p>Validation, consistency, tool rules</p>
+                                <div class="meter-meta">Recent retrievals: 12</div>
+                            </div>
+                            <div class="meter">
+                                <span>Right Brain</span>
+                                <div class="meter-bar"><span style="width: 54%"></span></div>
+                                <p>Mutation, divergence, edge cases</p>
+                                <div class="meter-meta">Recent retrievals: 9</div>
+                            </div>
+                        </div>
+                        <div class="sparkline">
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                    </div>
+
+                    <div class="panel ticks-panel">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Consciousness Ticks</h2>
+                                <p class="panel-subtitle">Tick timeline, novelty, and reflection depth.</p>
+                            </div>
+                        </div>
+                        <div class="tick-stats">
+                            <div>
+                                <span>Current</span>
+                                <strong id="tick-current">0.00</strong>
+                            </div>
+                            <div>
+                                <span>Average</span>
+                                <strong>0.52</strong>
+                            </div>
+                            <div>
+                                <span>Peak</span>
+                                <strong>0.95</strong>
+                            </div>
+                        </div>
+                        <div class="timeline">
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        <div class="list-block">
+                            <h3>Novelty Signals</h3>
+                            <div class="list">
+                                <div class="list-item">No novelty spikes in the last 5 minutes.</div>
+                            </div>
+                        </div>
+                        <div class="list-block">
+                            <h3>Mode Transitions</h3>
+                            <div class="list">
+                                <div class="list-item">Explore -> Integrate (2m ago)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel learning-panel">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Learning Analytics</h2>
+                                <p class="panel-subtitle">Pipeline throughput and curation health.</p>
+                            </div>
+                            <span class="chip secondary">Last 24h</span>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-card">
+                                <span class="metric-label">Insights</span>
+                                <span class="metric-value">142</span>
+                                <span class="metric-meta">Extraction rate</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Curated</span>
+                                <span class="metric-value">89</span>
+                                <span class="metric-meta">Approved bullets</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Success Ratio</span>
+                                <span class="metric-value">78%</span>
+                                <span class="metric-meta">Outcome success/failure</span>
+                            </div>
+                        </div>
+                        <div class="ring-grid">
+                            <div class="ring">
+                                <div class="ring-core">40%</div>
+                                <span>Shallow</span>
+                            </div>
+                            <div class="ring">
+                                <div class="ring-core">35%</div>
+                                <span>Medium</span>
+                            </div>
+                            <div class="ring">
+                                <div class="ring-core">25%</div>
+                                <span>Deep</span>
+                            </div>
+                        </div>
+                        <div class="list-block">
+                            <h3>Learning Events</h3>
+                            <div class="list">
+                                <div class="list-item">New insight extracted (0.82 confidence)</div>
+                                <div class="list-item">Shared promotion approved</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel procedures-panel wide">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Procedures Library</h2>
+                                <p class="panel-subtitle">Learned playbooks and reusable bullet chains.</p>
+                            </div>
+                            <div class="procedures-actions">
+                                <input id="procedure-search" type="text" placeholder="Search procedures...">
+                                <button id="refresh-procedures" class="ghost-btn">Refresh</button>
+                            </div>
+                        </div>
+                        <div id="procedure-list" class="procedure-list">
+                            <div class="procedure-card">
+                                <div>
+                                    <h3>Tool invocation checklist</h3>
+                                    <p>Validate params, run dry-run, capture trace, update bullets.</p>
+                                </div>
+                                <span class="pill">Shared</span>
+                            </div>
+                            <div class="procedure-card">
+                                <div>
+                                    <h3>Fallback exploration sequence</h3>
+                                    <p>Generate variants, test novelty, record divergences.</p>
+                                </div>
+                                <span class="pill">Right</span>
+                            </div>
+                        </div>
+                        <div class="callout">
+                            <div class="callout-title">Cheatsheets (Planned)</div>
+                            <div class="callout-body">We will add structured multi-step procedure stacks linked to bullet IDs.</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="section-title">Connected Servers</div>
-                <div id="mcp-servers">
-                    <div class="loading">Loading...</div>
+            </section>
+
+            <section id="tab-chat" class="tab-panel">
+                <div class="chat-layout">
+                    <div class="panel chat-main">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Conversation</h2>
+                                <p class="panel-subtitle">ChatGPT-style flow with hemisphere context.</p>
+                            </div>
+                            <div class="chat-controls">
+                                <label>
+                                    Mode
+                                    <select id="chat-mode">
+                                        <option value="auto">Auto</option>
+                                        <option value="left">Force Left</option>
+                                        <option value="right">Force Right</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    Temperature
+                                    <input id="chat-temp" type="number" min="0" max="1" step="0.1" value="0.7">
+                                </label>
+                                <label>
+                                    Max Tokens
+                                    <input id="chat-tokens" type="number" min="256" max="4096" step="128" value="2048">
+                                </label>
+                                <button id="chat-clear" class="ghost-btn">Clear</button>
+                            </div>
+                        </div>
+                        <div id="chat-messages" class="chat-messages">
+                            <div class="message system">
+                                <div class="message-meta">System</div>
+                                <div class="text">BicameralMind ready. Ask a question to begin.</div>
+                            </div>
+                        </div>
+                        <div class="chat-input">
+                            <textarea id="message-input" rows="2" placeholder="Message BicameralMind..."></textarea>
+                            <div class="chat-actions">
+                                <button id="send-btn" class="primary-btn">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="panel chat-side">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Context and Signals</h2>
+                                <p class="panel-subtitle">Retrieved bullets, suggestions, and analytics.</p>
+                            </div>
+                        </div>
+                        <div class="context-block">
+                            <h3>Retrieved Bullets</h3>
+                            <div id="chat-context" class="context-list">
+                                <div class="context-item">No bullets yet.</div>
+                            </div>
+                        </div>
+                        <div class="context-block">
+                            <h3>Bullet Suggestions</h3>
+                            <div class="context-list">
+                                <div class="context-item">
+                                    <strong>Validate based on context</strong>
+                                    <div class="context-actions">
+                                        <button class="ghost-btn">Approve</button>
+                                        <button class="ghost-btn">Reject</button>
+                                        <button class="ghost-btn">Edit</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="context-block">
+                            <h3>Conversation Analytics</h3>
+                            <div class="metric-stack">
+                                <div class="metric-pill">Tokens: <strong id="analytics-tokens">0</strong></div>
+                                <div class="metric-pill">Bullets: <strong id="analytics-bullets">0</strong></div>
+                                <div class="metric-pill">Ticks: <strong id="analytics-ticks">0</strong></div>
+                                <div class="metric-pill">Response Time: <strong id="analytics-response-time">0ms</strong></div>
+                            </div>
+                        </div>
+                    </aside>
                 </div>
-                <div class="section-title">Recent Executions</div>
-                <div id="mcp-log">
-                    <div class="log-entry">No executions yet</div>
+            </section>
+
+            <section id="tab-mcp" class="tab-panel">
+                <div class="mcp-grid">
+                    <div class="panel mcp-servers">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Connected Servers</h2>
+                                <p class="panel-subtitle">Enable, disable, or remove MCP servers.</p>
+                            </div>
+                            <button class="ghost-btn" onclick="openMCPConfig()">Advanced Config</button>
+                        </div>
+                        <div id="mcp-servers" class="server-list">
+                            <div class="loading">Loading...</div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-log">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Execution Log</h2>
+                                <p class="panel-subtitle">Recent tool calls and outcomes.</p>
+                            </div>
+                        </div>
+                        <div id="mcp-log" class="log-list">
+                            <div class="log-entry">No executions yet</div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-tools">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Tool Registry</h2>
+                                <p class="panel-subtitle">Available tools, policies, and learning impact.</p>
+                            </div>
+                        </div>
+                        <div class="tool-table">
+                            <div class="tool-row header">
+                                <span>Tool</span>
+                                <span>Status</span>
+                                <span>Learned</span>
+                            </div>
+                            <div class="tool-row">
+                                <span>filesystem.read_file</span>
+                                <span class="pill ok">Allowed</span>
+                                <span>+12 bullets</span>
+                            </div>
+                            <div class="tool-row">
+                                <span>github.search_repos</span>
+                                <span class="pill warn">Blocked</span>
+                                <span>+0 bullets</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-analytics">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Tool Analytics</h2>
+                                <p class="panel-subtitle">Usage, success rates, and novelty signals.</p>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric-card">
+                                <span class="metric-label">Most Used</span>
+                                <span class="metric-value">read_file</span>
+                                <span class="metric-meta">47 calls</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Highest Success</span>
+                                <span class="metric-value">98%</span>
+                                <span class="metric-meta">write_file</span>
+                            </div>
+                            <div class="metric-card">
+                                <span class="metric-label">Most Learning</span>
+                                <span class="metric-value">12</span>
+                                <span class="metric-meta">search_repos</span>
+                            </div>
+                        </div>
+                        <div class="mini-chart">
+                            <div class="chart-header">Success Rate Timeline</div>
+                            <div class="bar-chart">
+                                <span style="height: 60%"></span>
+                                <span style="height: 48%"></span>
+                                <span style="height: 72%"></span>
+                                <span style="height: 66%"></span>
+                                <span style="height: 80%"></span>
+                                <span style="height: 58%"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-flow">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Tool Flow</h2>
+                                <p class="panel-subtitle">Visual execution chains (placeholder).</p>
+                            </div>
+                        </div>
+                        <div class="flow-placeholder">
+                            <div class="flow-node">User</div>
+                            <div class="flow-node">Planner</div>
+                            <div class="flow-node">Tool</div>
+                            <div class="flow-node">Result</div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-config">
+                        <div class="panel-header">
+                            <div>
+                                <h2>Add MCP Server</h2>
+                                <p class="panel-subtitle">Define new MCP endpoints and capabilities.</p>
+                            </div>
+                        </div>
+                        <form id="mcp-add-form" class="config-form">
+                            <label>
+                                Name
+                                <input type="text" id="mcp-name" placeholder="filesystem" required>
+                            </label>
+                            <label>
+                                Type
+                                <select id="mcp-type">
+                                    <option value="stdio">stdio</option>
+                                    <option value="http">http</option>
+                                </select>
+                            </label>
+                            <label>
+                                Command / URL
+                                <input type="text" id="mcp-command" placeholder="npx" required>
+                            </label>
+                            <label>
+                                Args (comma separated)
+                                <input type="text" id="mcp-args" placeholder="-y,@modelcontextprotocol/server-filesystem,./data">
+                            </label>
+                            <label>
+                                Description
+                                <input type="text" id="mcp-description" placeholder="Read/write files" required>
+                            </label>
+                            <label>
+                                Category
+                                <input type="text" id="mcp-category" placeholder="filesystem">
+                            </label>
+                            <div class="form-row">
+                                <label class="toggle">
+                                    <input type="checkbox" id="mcp-enabled" checked>
+                                    <span>Enabled</span>
+                                </label>
+                                <button type="submit" class="primary-btn">Add Server</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-                <div class="callout">
-                    <div class="callout-title">Learning Impact</div>
-                    <div class="callout-body">Tool outcomes are feeding into procedural memory. Watch for new bullets after successful runs.</div>
-                </div>
-            </div>
-        </div>
+            </section>
+        </main>
     </div>
 
-    <!-- MCP Configuration Modal -->
     <iframe src="/static/mcp-config.html" style="display:none" onload="document.body.appendChild(this.contentDocument.body.firstChild);this.remove()"></iframe>
 
     <script src="/static/app.js"></script>

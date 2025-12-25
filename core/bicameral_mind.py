@@ -10,6 +10,7 @@ from core.right_brain.agent import RightBrain
 from core.meta_controller.controller import MetaController, CognitiveMode
 from core.base_agent import Message, MessageType
 from integrations.rag.agentic_rag import AgenticRAG
+from core.memory import ProceduralMemory
 
 
 class BicameralMind:
@@ -23,10 +24,13 @@ class BicameralMind:
     - Agentic RAG: Iterative knowledge retrieval
     """
     
-    def __init__(self, config_path: str = "config/config.yaml"):
+    def __init__(self, config_path: Any = "config/config.yaml"):
         # Load config
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+        if isinstance(config_path, dict):
+            self.config = config_path
+        else:
+            with open(config_path, 'r') as f:
+                self.config = yaml.safe_load(f)
         
         # Initialize LLM
         model_config = self.config.get("model", {})
@@ -46,6 +50,9 @@ class BicameralMind:
             self.right_brain
         )
         
+        # Initialize procedural memory
+        self.memory = ProceduralMemory(self.config)
+
         # Initialize RAG if enabled
         self.rag = None
         if self.config.get("rag", {}).get("enabled", False):
@@ -138,6 +145,13 @@ class BicameralMind:
         })
         
         return result
+
+    async def process_input(self, user_input: str, use_rag: bool = True) -> str:
+        """Compatibility wrapper for older UI code paths."""
+        result = await self.process(user_input, use_rag=use_rag)
+        if isinstance(result, dict):
+            return result.get("output", str(result))
+        return str(result)
     
     async def _process_exploit(self, content: Dict) -> Dict[str, Any]:
         """Process through left brain (pattern matching)"""

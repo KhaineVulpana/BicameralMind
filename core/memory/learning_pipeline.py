@@ -433,6 +433,7 @@ def create_trace(
     tools_called: Optional[List[str]] = None,
     tick_rate: float = 0.5,
     confidence: float = 0.5,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> ExecutionTrace:
     """Create an execution trace.
 
@@ -475,4 +476,5 @@ def create_trace(
         error_message=error_message,
         tick_rate=tick_rate,
         confidence=confidence,
+        metadata=metadata or {},
     )

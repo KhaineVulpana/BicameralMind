@@ -1,9 +1,10 @@
 """MCP Client Implementation"""
 import asyncio
 import logging
-from typing import Dict, Any, List, Optional
+from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 from .exceptions import (
     MCPConnectionError,
@@ -46,11 +47,14 @@ class MCPServer:
     args: List[str] = field(default_factory=list)
     env: Dict[str, str] = field(default_factory=dict)
     endpoint: Optional[str] = None
+    cwd: Optional[str] = None
     enabled: bool = True
     connected: bool = False
+    mock: bool = False
     tools: List[MCPTool] = field(default_factory=list)
     last_connected: Optional[datetime] = None
     connection_attempts: int = 0
+    session: Optional[Any] = None
 
 
 @dataclass
@@ -83,10 +87,12 @@ class MCPClient:
         self.connection_timeout = self.config.get("connection_timeout", 30)
         self.tool_timeout = self.config.get("tool_timeout", 60)
         self.max_retries = self.config.get("max_retries", 3)
+        self.mock_on_failure = self.config.get("mock_on_failure", True)
 
         self.servers: Dict[str, MCPServer] = {}
         self.tools: Dict[str, MCPTool] = {}  # tool_name -> MCPTool
         self.connected = False
+        self._connection_stacks: Dict[str, AsyncExitStack] = {}
 
         # Tool filtering
         self.allowed_tools = set(self.config.get("allowed_tools", []))
@@ -116,8 +122,9 @@ class MCPClient:
                 type=server_config.get("type", "stdio"),
                 command=server_config.get("command"),
                 args=server_config.get("args", []),
-                env=server_config.get("env", {}),
-                endpoint=server_config.get("endpoint"),
+                env={k: str(v) for k, v in (server_config.get("env") or {}).items()},
+                endpoint=server_config.get("endpoint") or server_config.get("url"),
+                cwd=server_config.get("cwd"),
                 enabled=server_config.get("enabled", True),
             )
 
@@ -134,12 +141,16 @@ class MCPClient:
             logger.warning("No MCP servers configured")
             return
 
+        self.tools.clear()
+
         logger.info(f"Connecting to {len(self.servers)} MCP servers...")
 
         # Connect to each server
         for server_name, server in self.servers.items():
             if not server.enabled:
                 continue
+            server.mock = False
+            server.session = None
 
             try:
                 await self._connect_server(server)
@@ -183,6 +194,13 @@ class MCPClient:
 
         except Exception as e:
             server.connection_attempts += 1
+            server.connected = False
+            server.session = None
+            if self.mock_on_failure:
+                logger.warning(f"Falling back to mock tools for {server.name}: {e}")
+                server.mock = True
+                await self._discover_tools(server)
+                return
             raise MCPConnectionError(f"Failed to connect to {server.name}: {e}")
 
     async def _connect_stdio_server(self, server: MCPServer):
@@ -192,17 +210,33 @@ class MCPClient:
         Args:
             server: MCPServer with stdio configuration
         """
-        # TODO: Implement actual stdio connection
-        # For now, simulate connection
+        if not server.command:
+            raise MCPConnectionError("Missing command for stdio server")
+
+        from mcp.client.session import ClientSession
+        from mcp.client.stdio import StdioServerParameters, stdio_client
+
         logger.debug(f"STDIO server {server.name}: {server.command} {' '.join(server.args)}")
 
-        # In a real implementation, you would:
-        # 1. Start subprocess with server.command and server.args
-        # 2. Set up stdin/stdout communication
-        # 3. Send initial handshake
-        # 4. Wait for server ready signal
+        params = StdioServerParameters(
+            command=server.command,
+            args=server.args or [],
+            env=server.env or None,
+            cwd=server.cwd,
+        )
 
-        await asyncio.sleep(0.1)  # Simulate connection delay
+        stack = AsyncExitStack()
+        read_stream, write_stream = await stack.enter_async_context(stdio_client(params))
+        session = ClientSession(
+            read_stream,
+            write_stream,
+            read_timeout_seconds=timedelta(seconds=self.connection_timeout),
+        )
+        await stack.enter_async_context(session)
+        await session.initialize()
+
+        self._connection_stacks[server.name] = stack
+        server.session = session
 
     async def _connect_http_server(self, server: MCPServer):
         """
@@ -211,17 +245,28 @@ class MCPClient:
         Args:
             server: MCPServer with HTTP configuration
         """
-        # TODO: Implement actual HTTP connection
-        # For now, simulate connection
+        if not server.endpoint:
+            raise MCPConnectionError("Missing endpoint for HTTP server")
+
+        from mcp.client.session import ClientSession
+        from mcp.client.streamable_http import streamable_http_client
+
         logger.debug(f"HTTP server {server.name}: {server.endpoint}")
 
-        # In a real implementation, you would:
-        # 1. Make HTTP request to server.endpoint/health
-        # 2. Verify server is responding
-        # 3. Exchange handshake/authentication
-        # 4. Get server capabilities
+        stack = AsyncExitStack()
+        read_stream, write_stream, _ = await stack.enter_async_context(
+            streamable_http_client(server.endpoint)
+        )
+        session = ClientSession(
+            read_stream,
+            write_stream,
+            read_timeout_seconds=timedelta(seconds=self.connection_timeout),
+        )
+        await stack.enter_async_context(session)
+        await session.initialize()
 
-        await asyncio.sleep(0.1)  # Simulate connection delay
+        self._connection_stacks[server.name] = stack
+        server.session = session
 
     async def _discover_tools(self, server: MCPServer):
         """
@@ -230,21 +275,37 @@ class MCPClient:
         Args:
             server: Connected MCPServer
         """
-        # TODO: Implement actual tool discovery
-        # For now, use mock tools for testing
+        server.tools = []
 
-        mock_tools = self._get_mock_tools(server.name)
+        tools_payload: List[Dict[str, Any]] = []
+        if server.session:
+            cursor = None
+            while True:
+                result = await server.session.list_tools(cursor=cursor)
+                for tool in result.tools or []:
+                    tools_payload.append(
+                        {
+                            "name": tool.name,
+                            "description": tool.description or "",
+                            "parameters": tool.inputSchema or {},
+                            "schema": tool.outputSchema,
+                        }
+                    )
+                cursor = result.nextCursor
+                if not cursor:
+                    break
+        else:
+            tools_payload = self._get_mock_tools(server.name)
 
-        for tool_data in mock_tools:
+        for tool_data in tools_payload:
             tool = MCPTool(
                 name=tool_data["name"],
-                description=tool_data["description"],
+                description=tool_data.get("description", ""),
                 parameters=tool_data.get("parameters", {}),
                 server_name=server.name,
                 schema=tool_data.get("schema"),
             )
 
-            # Check if tool is allowed
             if self._is_tool_allowed(tool.name):
                 server.tools.append(tool)
                 self.tools[tool.name] = tool
@@ -420,20 +481,59 @@ class MCPClient:
         Returns:
             MCPToolResult
         """
-        # TODO: Implement actual tool execution
-        # For now, simulate execution with mock results
-
         logger.debug(f"Executing tool: {tool.name} with params: {parameters}")
 
-        # Simulate execution delay
-        await asyncio.sleep(0.1)
+        server = self.servers.get(tool.server_name)
+        if not server or not server.session:
+            if self.mock_on_failure:
+                return MCPToolResult(
+                    tool_name=tool.name,
+                    success=True,
+                    output=f"Mock result from {tool.name}",
+                    metadata={"server": tool.server_name, "mock": True},
+                )
+            return MCPToolResult(
+                tool_name=tool.name,
+                success=False,
+                error="Server not connected",
+            )
 
-        # Mock successful result
+        try:
+            result = await server.session.call_tool(
+                tool.name,
+                arguments=parameters,
+                read_timeout_seconds=timedelta(seconds=self.tool_timeout),
+            )
+        except Exception as e:
+            return MCPToolResult(
+                tool_name=tool.name,
+                success=False,
+                error=str(e),
+                metadata={"server": tool.server_name},
+            )
+
+        output = None
+        if result.structuredContent is not None:
+            output = result.structuredContent
+        elif result.content:
+            blocks = []
+            for block in result.content:
+                if hasattr(block, "text"):
+                    blocks.append(block.text)
+                elif hasattr(block, "data"):
+                    blocks.append(block.data)
+                elif hasattr(block, "model_dump"):
+                    blocks.append(block.model_dump())
+                else:
+                    blocks.append(str(block))
+            output = blocks[0] if len(blocks) == 1 else blocks
+
         return MCPToolResult(
             tool_name=tool.name,
-            success=True,
-            output=f"Mock result from {tool.name}",
-            metadata={"server": tool.server_name, "mock": True},
+            success=not result.isError,
+            output=output,
+            error="Tool returned error" if result.isError else None,
+            metadata={"server": tool.server_name},
         )
 
     async def list_tools(self) -> List[MCPTool]:
@@ -479,6 +579,9 @@ class MCPClient:
 
     async def _disconnect_server(self, server: MCPServer):
         """Disconnect from a single server"""
-        # TODO: Implement actual disconnection
+        stack = self._connection_stacks.pop(server.name, None)
+        if stack:
+            await stack.aclose()
         server.connected = False
+        server.session = None
         server.tools.clear()

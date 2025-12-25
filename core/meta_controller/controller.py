@@ -1,12 +1,13 @@
 """Meta Controller: Consciousness Tick System"""
 import asyncio
 import time
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from dataclasses import dataclass
 from enum import Enum
 from loguru import logger
 
 from .exploration_policy import ExplorationPolicy
+from .novelty_detector import NoveltyDetector
 
 
 class CognitiveMode(Enum):
@@ -67,6 +68,8 @@ class MetaController:
 
         self.suggestion_handler = suggestion_handler
         self.exploration_policy = exploration_policy or ExplorationPolicy(config)
+        novelty_cfg = config.get("novelty_detection", {}) if isinstance(config, dict) else {}
+        self.novelty_detector = NoveltyDetector(novelty_cfg)
         self._lead_history: list = []
         self._forced_exploration_count = 0
         
@@ -280,6 +283,46 @@ class MetaController:
         if recent_ticks:
             return len(recent_ticks) / window
         return 0.0
+
+    def calculate_novelty_tick_rate(
+        self,
+        expected_outcome: Optional[bool] = None,
+        actual_outcome: bool = False,
+        confidence: float = 0.5,
+        tools_used: Optional[List[str]] = None,
+        tool_results: Optional[Dict[str, bool]] = None,
+        error_message: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> float:
+        """Calculate tick rate based on novelty signals from execution."""
+        return self.novelty_detector.measure_novelty(
+            expected_outcome=expected_outcome,
+            actual_outcome=actual_outcome,
+            confidence=confidence,
+            tools_used=tools_used or [],
+            tool_results=tool_results or {},
+            error_message=error_message,
+            context=context or {},
+        )
+
+    def calculate_tick_rate_from_trace(
+        self,
+        trace_data: Dict[str, Any],
+        expected_success: Optional[bool] = None,
+    ) -> float:
+        """Calculate tick rate from an execution trace dictionary."""
+        return self.novelty_detector.measure_from_trace(
+            trace_data=trace_data,
+            expected_success=expected_success,
+        )
+
+    def get_current_novelty(self) -> float:
+        """Return the moving-average novelty level."""
+        return self.novelty_detector.get_current_tick_rate()
+
+    def get_novelty_stats(self) -> Dict[str, Any]:
+        """Return novelty detector statistics."""
+        return self.novelty_detector.get_stats()
     
     def get_consciousness_metrics(self) -> Dict[str, Any]:
         """Return meta-metrics about consciousness state"""
@@ -292,4 +335,5 @@ class MetaController:
             "time_since_last_switch": time.time() - self._last_mode_switch,
             "recent_ticks": len([t for t in self.tick_history if time.time() - t.timestamp < 5.0]),
             "forced_exploration_count": self._forced_exploration_count,
+            "current_novelty": self.get_current_novelty(),
         }

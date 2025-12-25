@@ -129,7 +129,7 @@ async def example_2_tool_execution_with_learning():
     if result.learning_result:
         print(f"\nLearning Details:")
         print(f"  Reflection depth: {result.learning_result.reflection_depth}")
-        print(f"  Bullets added: {result.learning_result.bullets_added}")
+        print(f"  Bullets added: {result.learning_result.bullets_created}")
 
     await mcp_client.disconnect()
 
