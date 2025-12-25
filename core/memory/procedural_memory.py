@@ -39,6 +39,9 @@ class ProceduralMemory:
             "shared": [],
         }
 
+    def _get_staging_config(self) -> Dict[str, Any]:
+        return (self.config.get("procedural_memory", {}) or {}).get("staging", {}) or {}
+
     def add(
         self,
         text: str,
@@ -49,16 +52,32 @@ class ProceduralMemory:
         source_trace_id: str = "",
         status: BulletStatus = BulletStatus.QUARANTINED,
         metadata: Optional[Dict[str, Any]] = None,
+        stage: Optional[bool] = None,
+        auto_assign: Optional[bool] = None,
+        source_hemisphere: Optional[Hemisphere] = None,
     ) -> Bullet:
-        """Add a new procedural bullet.
+        'Add a new procedural bullet.'
 
-        New bullets start as QUARANTINED by default and require
-        validation before being promoted to ACTIVE.
-        """
+        # When staging is enabled, new bullets are staged before assignment.
         if not self.enabled:
-            raise RuntimeError("ProceduralMemory is disabled")
+            raise RuntimeError('ProceduralMemory is disabled')
 
-        # Create modern Bullet
+        staging_cfg = self._get_staging_config()
+        stage_enabled = bool(staging_cfg.get('enabled', False))
+        use_stage = stage_enabled if stage is None else stage
+
+        if use_stage:
+            return self.stage_bullet(
+                text=text,
+                source_hemisphere=source_hemisphere or side,
+                bullet_type=bullet_type,
+                tags=tags,
+                confidence=confidence,
+                source_trace_id=source_trace_id,
+                metadata=metadata,
+                auto_assign=auto_assign,
+            )
+
         bullet = Bullet.create(
             text=text,
             side=side,
@@ -71,7 +90,6 @@ class ProceduralMemory:
             bullet.metadata = metadata
         bullet.status = status
 
-        # Store in vector DB
         self.store.add_bullet(
             side=side.value,
             text=bullet.text,
@@ -84,8 +102,113 @@ class ProceduralMemory:
             bullet_id=bullet.id,
         )
 
-        logger.debug(f"📝 Added bullet: {bullet.id[:16]}... to {side.value}")
+        logger.debug(f'Added bullet: {bullet.id[:16]}... to {side.value}')
         return bullet
+
+    def stage_bullet(
+        self,
+        text: str,
+        source_hemisphere: Hemisphere,
+        bullet_type: BulletType = BulletType.HEURISTIC,
+        tags: Optional[List[str]] = None,
+        confidence: float = 0.5,
+        source_trace_id: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+        auto_assign: Optional[bool] = None,
+    ) -> Bullet:
+        'Add a bullet to staging (awaiting hemisphere assignment).'
+        if not self.enabled:
+            raise RuntimeError('ProceduralMemory is disabled')
+
+        staging_cfg = self._get_staging_config()
+        auto_assign = auto_assign if auto_assign is not None else bool(
+            staging_cfg.get('auto_assign', False)
+        )
+
+        meta = dict(metadata or {})
+        meta['source_hemisphere'] = source_hemisphere.value
+
+        if auto_assign:
+            meta["auto_assign_requested"] = True
+
+        bullet = Bullet.create(
+            text=text,
+            side=Hemisphere.STAGING,
+            bullet_type=bullet_type,
+            tags=tags,
+            confidence=confidence,
+            source_trace_id=source_trace_id,
+        )
+        bullet.status = BulletStatus.STAGED
+        bullet.metadata = meta
+
+        self.store.add_bullet(
+            side=Hemisphere.STAGING.value,
+            text=bullet.text,
+            bullet_type=bullet_type.value,
+            tags=tags,
+            status=BulletStatus.STAGED.value,
+            confidence=confidence,
+            source_trace_id=source_trace_id,
+            metadata=meta,
+            bullet_id=bullet.id,
+        )
+
+        logger.debug(f'Staged bullet: {bullet.id[:16]}...')
+        return bullet
+
+    def assign_staged_bullet(
+        self,
+        bullet_id: str,
+        target_hemisphere: Hemisphere,
+        reviewer: str = 'manual',
+    ) -> Optional[Bullet]:
+        'Assign a staged bullet to a hemisphere (quarantined).'
+        staged = self.store.get_bullet(Hemisphere.STAGING.value, bullet_id)
+        if not staged:
+            return None
+
+        metadata = dict(staged.metadata or {})
+        metadata.update(
+            {
+                'assigned_by': reviewer,
+                'assigned_at': staged.created_at,
+                'original_staging_id': bullet_id,
+            }
+        )
+
+        self.store.delete_bullet(Hemisphere.STAGING.value, bullet_id)
+
+        created = self.add(
+            text=staged.text,
+            side=target_hemisphere,
+            bullet_type=BulletType(staged.type),
+            tags=staged.tags,
+            confidence=staged.confidence,
+            source_trace_id=staged.source_trace_id,
+            status=BulletStatus.QUARANTINED,
+            metadata=metadata,
+            stage=False,
+        )
+        return created
+
+    def list_staged(self, limit: int = 100, include_deprecated: bool = False) -> List[Bullet]:
+        'List staged bullets awaiting assignment.'
+        staged = self.store.list_bullets(
+            Hemisphere.STAGING.value,
+            limit=limit,
+            include_deprecated=include_deprecated,
+        )
+        return [self._convert_bullet(b) for b in staged]
+
+    def reject_staged_bullet(self, bullet_id: str, reason: str = '', reviewer: str = 'manual') -> bool:
+        'Reject and delete a staged bullet.'
+        try:
+            self.store.delete_bullet(Hemisphere.STAGING.value, bullet_id)
+        except Exception:
+            return False
+        logger.info(f'Rejected staged bullet {bullet_id[:12]} (reviewer={reviewer}, reason={reason})')
+        return True
 
     def retrieve(
         self,
@@ -105,7 +228,6 @@ class ProceduralMemory:
         if not self.enabled:
             return ([], [])
 
-        # Query the store
         old_bullets, used_ids = self.store.query(
             side=side.value,
             query_text=query,
@@ -115,15 +237,12 @@ class ProceduralMemory:
             include_shared=include_shared,
         )
 
-        # Convert ProceduralBullet -> Bullet
         bullets = [self._convert_bullet(b) for b in old_bullets]
 
-        # Track active bullets for this hemisphere
         self._active_bullet_ids[side.value] = used_ids
 
         logger.debug(
-            f"🔍 Retrieved {len(bullets)} bullets for {side.value} "
-            f"(shared={include_shared})"
+            f"Retrieved {len(bullets)} bullets for {side.value} (shared={include_shared})"
         )
 
         return bullets, used_ids
@@ -142,21 +261,16 @@ class ProceduralMemory:
         - Test pass/fail
         - User confirmation/correction
         - Validator results
-
-        Args:
-            bullet_ids: IDs of bullets that were used
-            helpful: True if outcome was positive, False if negative
-            side: Optional hemisphere context (for logging)
         """
         if not self.enabled or not bullet_ids:
             return
 
         self.store.record_outcome(bullet_ids, helpful=helpful)
 
-        action = "✅ helpful" if helpful else "❌ harmful"
+        action = "helpful" if helpful else "harmful"
         side_str = f" ({side.value})" if side else ""
         logger.info(
-            f"📊 Recorded {action} for {len(bullet_ids)} bullets{side_str}"
+            f"Recorded {action} for {len(bullet_ids)} bullets{side_str}"
         )
 
     def clear_active_bullets(self, side: Hemisphere) -> None:
@@ -225,7 +339,6 @@ class ProceduralMemory:
         if not bullets:
             return ""
 
-        # Group by type
         by_type: Dict[BulletType, List[Bullet]] = {}
         for bullet in bullets[:max_bullets] if max_bullets else bullets:
             if bullet.type not in by_type:
@@ -234,7 +347,6 @@ class ProceduralMemory:
 
         sections = []
 
-        # Format each type as a section
         type_names = {
             BulletType.TOOL_RULE: "TOOL USAGE RULES",
             BulletType.HEURISTIC: "STRATEGIES AND HEURISTICS",
@@ -250,7 +362,6 @@ class ProceduralMemory:
             section_name = type_names.get(bullet_type, bullet_type.value.upper())
             lines = [f"\n## {section_name}\n"]
 
-            # Sort by score
             type_bullets.sort(key=lambda b: b.score(), reverse=True)
 
             for bullet in type_bullets:
@@ -275,7 +386,7 @@ class ProceduralMemory:
             "collections": {},
         }
 
-        for side in ["left", "right", "shared"]:
+        for side in ["left", "right", "shared", "staging"]:
             try:
                 col = self.store._collections[side]
                 count = col.count()
@@ -292,21 +403,7 @@ class ProceduralMemory:
         min_score: float = -0.5,
         min_age_days: int = 7,
     ) -> int:
-        """Prune bullets with persistently low scores.
-
-        This is a maintenance operation, not a core learning mechanism.
-        Should be run periodically (e.g., nightly).
-
-        Args:
-            side: Which hemisphere to prune
-            min_score: Bullets below this score are candidates
-            min_age_days: Only prune bullets older than this
-
-        Returns:
-            Number of bullets pruned
-        """
-        # TODO: Implement pruning logic
-        # For now, just return 0
+        """Prune bullets with persistently low scores."""
         logger.warning("Pruning not yet implemented")
         return 0
 
@@ -315,19 +412,6 @@ class ProceduralMemory:
         side: Hemisphere,
         similarity_threshold: float = 0.95,
     ) -> int:
-        """Remove near-duplicate bullets.
-
-        Uses semantic similarity of embeddings to identify duplicates,
-        keeping the one with higher score.
-
-        Args:
-            side: Which hemisphere to deduplicate
-            similarity_threshold: Cosine similarity threshold
-
-        Returns:
-            Number of bullets removed
-        """
-        # TODO: Implement deduplication logic
-        # For now, just return 0
+        """Remove near-duplicate bullets."""
         logger.warning("Deduplication not yet implemented")
         return 0

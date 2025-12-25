@@ -27,7 +27,8 @@
         <nav class="tab-nav">
             <button class="tab active" data-tab="dashboard">Dashboard</button>
             <button class="tab" data-tab="chat">Chat</button>
-            <button class="tab" data-tab="mcp">MCP Tools</button>
+            <button class="tab" data-tab="mcp">Tools</button>
+            <button class="tab" data-tab="staging">Staging</button>
         </nav>
 
         <main class="tab-panels">
@@ -110,6 +111,11 @@
                                 <span id="memory-shared" class="metric-value">-</span>
                                 <span class="metric-meta">Consensus playbooks</span>
                             </div>
+                            <div class="memory-card">
+                                <span class="metric-label">Staging</span>
+                                <span id="memory-staging" class="metric-value">-</span>
+                                <span class="metric-meta">Awaiting assignment</span>
+                            </div>
                         </div>
                         <div class="status-grid">
                             <div class="status-card">
@@ -123,6 +129,10 @@
                             <div class="status-card">
                                 <span>Deprecated</span>
                                 <strong id="memory-deprecated">-</strong>
+                            </div>
+                            <div class="status-card">
+                                <span>Staged</span>
+                                <strong id="memory-staged">-</strong>
                             </div>
                         </div>
                         <div class="mini-chart">
@@ -409,22 +419,21 @@
                                 <h2>Tool Registry</h2>
                                 <p class="panel-subtitle">Available tools, policies, and learning impact.</p>
                             </div>
+                            <div class="procedures-actions">
+                                <input id="tool-search" type="text" placeholder="Search tools...">
+                                <button class="ghost-btn" id="refresh-tools">Refresh</button>
+                            </div>
                         </div>
-                        <div class="tool-table">
+                        <div id="tool-table" class="tool-table">
                             <div class="tool-row header">
                                 <span>Tool</span>
+                                <span>Provider</span>
                                 <span>Status</span>
-                                <span>Learned</span>
                             </div>
                             <div class="tool-row">
-                                <span>filesystem.read_file</span>
-                                <span class="pill ok">Allowed</span>
-                                <span>+12 bullets</span>
-                            </div>
-                            <div class="tool-row">
-                                <span>github.search_repos</span>
-                                <span class="pill warn">Blocked</span>
-                                <span>+0 bullets</span>
+                                <span>Loading...</span>
+                                <span></span>
+                                <span></span>
                             </div>
                         </div>
                     </div>
@@ -524,6 +533,34 @@
                                 <button type="submit" class="primary-btn">Add Server</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-staging" class="tab-panel">
+                <div class="panel staging-panel wide">
+                    <div class="panel-header">
+                        <div>
+                            <h2>Staging Review Queue</h2>
+                            <p class="panel-subtitle">Assign staged bullets to hemispheres or reject them.</p>
+                        </div>
+                        <div class="procedures-actions">
+                            <button class="ghost-btn" id="refresh-staged">Refresh</button>
+                        </div>
+                    </div>
+                    <div id="staged-table" class="tool-table">
+                        <div class="tool-row header">
+                            <span>Text</span>
+                            <span>Confidence</span>
+                            <span>Source</span>
+                            <span>Actions</span>
+                        </div>
+                        <div class="tool-row">
+                            <span>Loading...</span>
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
                     </div>
                 </div>
             </section>

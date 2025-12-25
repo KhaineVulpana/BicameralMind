@@ -96,6 +96,8 @@ class ToolRegistry:
 
     def list_tools(self, enabled_only: bool = True) -> List[ToolDefinition]:
         """List tools in the registry."""
+        if not self._loaded:
+            self.load()
         tools = list(self._tools.values())
         if enabled_only:
             tools = [t for t in tools if t.enabled]
@@ -103,6 +105,8 @@ class ToolRegistry:
 
     def get_tool(self, tool_name: str, allow_disabled: bool = False) -> Optional[ToolDefinition]:
         """Fetch a tool by name."""
+        if not self._loaded:
+            self.load()
         tool = self._tools.get(tool_name)
         if not tool:
             return None
@@ -121,6 +125,8 @@ class ToolRegistry:
 
     def list_by_provider(self, provider: ToolProvider) -> List[ToolDefinition]:
         """List tools for a provider."""
+        if not self._loaded:
+            self.load()
         return [t for t in self._tools.values() if t.provider == provider]
 
     def is_loaded(self) -> bool:

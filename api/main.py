@@ -17,6 +17,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Try to import, but don't fail if not available
 try:
     from core.bicameral_mind import BicameralMind
+    from core.tools import ToolDefinition, ToolExecutionContext, initialize_tools, register_mcp_tools
+    from core.memory.bullet import Hemisphere
+    from core.memory import ProcedureStore, Procedure
     from config.config_loader import load_config, save_config
     BICAMERAL_AVAILABLE = True
 except ImportError as e:
@@ -26,6 +29,13 @@ except ImportError as e:
     BicameralMind = None
     load_config = None
     save_config = None
+    ToolDefinition = None
+    ToolExecutionContext = None
+    initialize_tools = None
+    register_mcp_tools = None
+    ProcedureStore = None
+    Procedure = None
+    Hemisphere = None
 
 app = FastAPI(title="BicameralMind UI")
 
@@ -41,12 +51,33 @@ app.add_middleware(
 # Global state
 bicameral_mind: Optional[BicameralMind] = None
 procedural_memory = None
+tool_registry = None
+tool_executor = None
+tool_index = None
+procedure_store = None
 active_connections: list[WebSocket] = []
 
 # Serve static files
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+def _tool_to_dict(tool):
+    return {
+        "name": tool.name,
+        "description": tool.description,
+        "provider": tool.provider.value if hasattr(tool.provider, "value") else str(tool.provider),
+        "input_schema": tool.input_schema,
+        "output_schema": tool.output_schema,
+        "tags": tool.tags,
+        "version": tool.version,
+        "enabled": tool.enabled,
+        "risk": tool.risk,
+        "timeout": tool.timeout,
+        "config": tool.config,
+        "metadata": tool.metadata,
+    }
 
 
 # Request models
@@ -78,14 +109,43 @@ class MCPServerUpdate(BaseModel):
     env: Optional[dict] = None
 
 
+class ToolExecuteRequest(BaseModel):
+    tool_name: str
+    parameters: dict = {}
+    hemisphere: str = "left"
+    confidence: float = 0.5
+    metadata: Optional[dict] = None
+
+
+class ToolRegisterRequest(BaseModel):
+    definition: dict
+
+
+class StagedAssignRequest(BaseModel):
+    target: str
+    reviewer: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class ProcedureRequest(BaseModel):
+    data: dict
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize bicameral mind on startup"""
     global bicameral_mind
+    global tool_registry, tool_executor, tool_index, procedure_store
 
     if not BICAMERAL_AVAILABLE:
         print("[INFO] Running in TEST MODE - UI only, no bicameral mind")
         bicameral_mind = None
+        if load_config and initialize_tools:
+            config = load_config()
+            tool_registry, tool_executor, tool_index = initialize_tools(config)
+            if ProcedureStore:
+                procedure_store = ProcedureStore(config)
+                procedure_store.load()
         return
 
     try:
@@ -96,6 +156,20 @@ async def startup():
         bicameral_mind = BicameralMind(config)
         global procedural_memory
         procedural_memory = getattr(bicameral_mind, "memory", None)
+        tool_registry = getattr(bicameral_mind, "tool_registry", None)
+        tool_executor = getattr(bicameral_mind, "tool_executor", None)
+        tool_index = getattr(bicameral_mind, "tool_index", None)
+        if ProcedureStore:
+            procedure_store = ProcedureStore(config)
+            procedure_store.load()
+
+        if getattr(bicameral_mind, "mcp_client", None) and config.get("mcp", {}).get("enabled", False):
+            try:
+                await bicameral_mind.mcp_client.connect()
+                if tool_registry:
+                    await register_mcp_tools(tool_registry, tool_index, bicameral_mind.mcp_client)
+            except Exception as e:
+                print(f"[WARN] MCP connect/register failed: {e}")
 
         print("[OK] BicameralMind initialized")
     except Exception as e:
@@ -122,7 +196,7 @@ async def get_status():
             "mode": "offline",
             "tick_rate": 0.0,
             "hemisphere": "none",
-            "memory": {"left": 0, "right": 0, "shared": 0},
+            "memory": {"left": 0, "right": 0, "shared": 0, "staging": 0},
             "model": "offline",
             "health": "OFFLINE"
         }
@@ -134,6 +208,7 @@ async def get_status():
         memory_left = stats.get("left", {}).get("count", 0) if stats else 0
         memory_right = stats.get("right", {}).get("count", 0) if stats else 0
         memory_shared = stats.get("shared", {}).get("count", 0) if stats else 0
+        memory_staging = stats.get("staging", {}).get("count", 0) if stats else 0
 
         return {
             "mode": bicameral_mind.meta_controller.mode.value,
@@ -142,7 +217,8 @@ async def get_status():
             "memory": {
                 "left": memory_left,
                 "right": memory_right,
-                "shared": memory_shared
+                "shared": memory_shared,
+                "staging": memory_staging
             },
             "model": bicameral_mind.config.get("model", {}).get("name", "unknown"),
             "health": "OK"
@@ -153,7 +229,7 @@ async def get_status():
             "mode": "error",
             "tick_rate": 0.0,
             "hemisphere": "none",
-            "memory": {"left": 0, "right": 0, "shared": 0},
+            "memory": {"left": 0, "right": 0, "shared": 0, "staging": 0},
             "model": "unknown",
             "health": "ERROR"
         }
@@ -166,10 +242,10 @@ async def get_memory_stats():
         return {"enabled": False, "collections": {}, "status": {}}
     try:
         stats = procedural_memory.get_stats()
-        status_keys = ("active", "quarantined", "deprecated", "unknown")
+        status_keys = ("active", "quarantined", "deprecated", "staged", "unknown")
         total_counts = {key: 0 for key in status_keys}
         by_side: dict[str, dict[str, int]] = {}
-        for side in ("left", "right", "shared"):
+        for side in ("left", "right", "shared", "staging"):
             side_counts = {key: 0 for key in status_keys}
             try:
                 bullets = procedural_memory.store.list_bullets(side, limit=10000, include_deprecated=True)
@@ -220,6 +296,122 @@ async def get_memory_bullets(hemisphere: str = "shared", limit: int = 25):
         return {"bullets": []}
 
 
+@app.get("/api/memory/staged")
+async def list_staged_bullets(limit: int = 50):
+    """List staged bullets awaiting assignment."""
+    if not procedural_memory:
+        return {"bullets": []}
+    try:
+        bullets = procedural_memory.list_staged(limit=limit)
+        return {
+            "bullets": [
+                {
+                    "id": b.id,
+                    "text": b.text,
+                    "status": b.status.value,
+                    "confidence": b.confidence,
+                    "tags": b.tags,
+                    "metadata": b.metadata,
+                }
+                for b in bullets
+            ]
+        }
+    except Exception as e:
+        print(f"[ERROR] Memory staged error: {e}")
+        return {"bullets": []}
+
+
+@app.post("/api/memory/staged/{bullet_id}/assign")
+async def assign_staged_bullet(bullet_id: str, request: StagedAssignRequest):
+    """Assign a staged bullet to a hemisphere."""
+    if not procedural_memory:
+        return {"error": "memory_unavailable"}
+    target = request.target.lower().strip()
+    if target not in ("left", "right"):
+        return {"error": "invalid_target"}
+    assigned = procedural_memory.assign_staged_bullet(
+        bullet_id,
+        Hemisphere(target),
+        reviewer=request.reviewer or "manual",
+    )
+    if not assigned:
+        return {"error": "not_found"}
+    return {"status": "success", "bullet_id": assigned.id, "side": assigned.side.value}
+
+
+@app.post("/api/memory/staged/{bullet_id}/reject")
+async def reject_staged_bullet(bullet_id: str, request: StagedAssignRequest):
+    """Reject a staged bullet."""
+    if not procedural_memory:
+        return {"error": "memory_unavailable"}
+    success = procedural_memory.reject_staged_bullet(
+        bullet_id,
+        reason=request.reason or "",
+        reviewer=request.reviewer or "manual",
+    )
+    return {"status": "success" if success else "not_found"}
+
+
+@app.get("/api/procedures")
+async def list_procedures(side: Optional[str] = None, status: Optional[str] = None, tag: Optional[str] = None, limit: int = 50):
+    """List procedures (playbooks)."""
+    if not procedure_store:
+        return {"procedures": []}
+    tags = [tag] if tag else None
+    procedures = procedure_store.list(side=side, status=status, tags=tags, limit=limit)
+    return {"procedures": [proc.to_dict() for proc in procedures]}
+
+
+@app.get("/api/procedures/search")
+async def search_procedures(q: str, limit: int = 20):
+    """Search procedures by title/description/tags."""
+    if not procedure_store:
+        return {"procedures": []}
+    procedures = procedure_store.search(q, limit=limit)
+    return {"procedures": [proc.to_dict() for proc in procedures]}
+
+
+@app.get("/api/procedures/{proc_id}")
+async def get_procedure(proc_id: str):
+    """Get a procedure by id."""
+    if not procedure_store:
+        return {"error": "store_unavailable"}
+    proc = procedure_store.get(proc_id)
+    if not proc:
+        return {"error": "not_found"}
+    return {"procedure": proc.to_dict()}
+
+
+@app.post("/api/procedures")
+async def create_procedure(request: ProcedureRequest):
+    """Create a new procedure."""
+    if not procedure_store:
+        return {"error": "store_unavailable"}
+    proc = Procedure.from_dict(request.data)
+    created = procedure_store.create(proc)
+    return {"status": "success", "procedure": created.to_dict()}
+
+
+@app.patch("/api/procedures/{proc_id}")
+async def update_procedure(proc_id: str, request: ProcedureRequest):
+    """Update an existing procedure."""
+    if not procedure_store:
+        return {"error": "store_unavailable"}
+    updated = procedure_store.update(proc_id, request.data)
+    if not updated:
+        return {"error": "not_found"}
+    return {"status": "success", "procedure": updated.to_dict()}
+
+
+@app.delete("/api/procedures/{proc_id}")
+async def delete_procedure(proc_id: str):
+    """Delete a procedure."""
+    if not procedure_store:
+        return {"error": "store_unavailable"}
+    removed = procedure_store.delete(proc_id)
+    return {"status": "success" if removed else "not_found"}
+
+
 @app.post("/api/chat/message")
 async def send_message(message: ChatMessage):
     """Process chat message through bicameral mind"""
@@ -264,6 +456,112 @@ async def send_message(message: ChatMessage):
             "hemisphere": "none",
             "bullets_used": 0
         }
+
+
+@app.get("/api/tools")
+async def list_tools(enabled_only: bool = True, provider: Optional[str] = None):
+    """List tools from the registry."""
+    if not tool_registry:
+        return {"tools": []}
+    tools = tool_registry.list_tools(enabled_only=enabled_only)
+    if provider:
+        tools = [t for t in tools if str(getattr(t.provider, "value", t.provider)) == provider]
+    return {"tools": [_tool_to_dict(tool) for tool in tools]}
+
+
+@app.get("/api/tools/{tool_name}")
+async def get_tool(tool_name: str):
+    """Get a single tool definition."""
+    if not tool_registry:
+        return {"error": "registry_unavailable"}
+    tool = tool_registry.get_tool(tool_name, allow_disabled=True)
+    if not tool:
+        return {"error": "not_found"}
+    return {"tool": _tool_to_dict(tool)}
+
+
+@app.get("/api/tools/search")
+async def search_tools(q: str, k: int = 5, provider: Optional[str] = None):
+    """Search tools by semantic similarity."""
+    if not tool_index:
+        return {"results": []}
+    providers = [provider] if provider else None
+    results = tool_index.search(q, k=k, providers=providers)
+    return {
+        "results": [
+            {
+                "name": r.name,
+                "score": r.score,
+                "provider": r.provider,
+                "description": r.description,
+                "tags": r.tags,
+            }
+            for r in results
+        ]
+    }
+
+
+@app.post("/api/tools/execute")
+async def execute_tool(request: ToolExecuteRequest):
+    """Execute a tool via the registry."""
+    if not tool_executor or ToolExecutionContext is None:
+        return {"error": "executor_unavailable"}
+    context = ToolExecutionContext(
+        tool_name=request.tool_name,
+        parameters=request.parameters or {},
+        hemisphere=request.hemisphere,
+        confidence=request.confidence,
+        metadata=request.metadata or {},
+    )
+    record = await tool_executor.execute(context)
+    return {
+        "tool_name": record.context.tool_name,
+        "success": record.result.success,
+        "output": record.result.output,
+        "error": record.result.error,
+        "execution_time": record.result.execution_time,
+        "steps": record.execution_steps,
+    }
+
+
+@app.post("/api/tools/register")
+async def register_tool(request: ToolRegisterRequest):
+    """Register a tool definition."""
+    if not tool_registry or ToolDefinition is None:
+        return {"error": "registry_unavailable"}
+    tool = ToolDefinition.from_dict(request.definition)
+    tool_registry.register(tool, save=True)
+    if tool_index:
+        tool_index.index_tools([tool])
+    return {"status": "success", "tool": _tool_to_dict(tool)}
+
+
+@app.patch("/api/tools/{tool_name}")
+async def update_tool(tool_name: str, update: dict):
+    """Update tool definition fields."""
+    if not tool_registry:
+        return {"error": "registry_unavailable"}
+    tool = tool_registry.get_tool(tool_name, allow_disabled=True)
+    if not tool:
+        return {"error": "not_found"}
+    for key, value in update.items():
+        if hasattr(tool, key):
+            setattr(tool, key, value)
+    tool_registry.register(tool, save=True)
+    if tool_index:
+        tool_index.index_tools([tool])
+    return {"status": "success", "tool": _tool_to_dict(tool)}
+
+
+@app.delete("/api/tools/{tool_name}")
+async def delete_tool(tool_name: str):
+    """Delete a tool definition."""
+    if not tool_registry:
+        return {"error": "registry_unavailable"}
+    removed = tool_registry.remove(tool_name, save=True)
+    if removed and tool_index:
+        tool_index.remove(tool_name)
+    return {"status": "success" if removed else "not_found"}
 
 
 @app.get("/api/mcp/servers")

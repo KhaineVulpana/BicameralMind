@@ -1,6 +1,6 @@
 # Bicameral Mind – Implementation Checklist
 
-Last Updated: December 24, 2025
+Last Updated: December 25, 2025
 
 ## Legend
 - ✅ = Complete and tested
@@ -30,8 +30,8 @@ Last Updated: December 24, 2025
 - ✅ No cross-hemisphere contamination
 
 ### Integration
-- ✅ Left brain agent integration
-- ✅ Right brain agent integration
+- 🔄 Left brain agent integration (needs bullet retrieval wiring)
+- 🔄 Right brain agent integration (needs bullet retrieval wiring)
 - ✅ BicameralMind orchestrator integration
 - ✅ Comprehensive examples
 - ✅ Test suite
@@ -59,7 +59,7 @@ Last Updated: December 24, 2025
 - ✅ Outcome recording
 - ✅ Bullet promotion logic
 - ✅ Learning pipeline orchestration
-- ✅ Integration with agents
+- 🔄 Integration with agents (needs bullet injection into prompts)
 
 ---
 
@@ -92,22 +92,13 @@ Last Updated: December 24, 2025
 
 ### Tool Outcome Learning
 - ✅ Tool success/failure detection
-- ❌ Tool-specific bullet collections (optional - future)
 - ✅ Automatic trace generation from tool calls
 - ✅ Integration with learning pipeline
 - ✅ Real-time learning from tool usage
 
-### MCP Tool Categories
-- ❌ CRM tools (HubSpot example - requires server setup)
-- ✅ File system tools (configured)
-- ❌ Web search tools (requires API key)
-- ❌ Database query tools (requires server setup)
-- ❌ API integration tools (requires configuration)
-
 ### Configuration & Management
 - ✅ MCP server configuration (config.yaml)
 - ✅ Tool allowlist/blocklist
-- ❌ Tool rate limiting (future enhancement)
 - ✅ Error handling and retry logic
 - ✅ Tool execution logging
 
@@ -117,6 +108,8 @@ Last Updated: December 24, 2025
 - ✅ Learning integration tests
 - ✅ Example MCP servers (mock)
 - ✅ Documentation (PHASE3_MCP_INTEGRATION.md)
+
+**Note**: MCP tools work but UI not wired to runtime client yet (Phase 5 task)
 
 ---
 
@@ -142,6 +135,47 @@ Last Updated: December 24, 2025
 - ✅ Backup before pruning
 - ✅ Prune history/audit log
 - ✅ Recovery mechanisms (rollback support)
+
+### Tests Fixed
+- ✅ All Phase 4 tests passing (6/6)
+- ✅ Fixed parameter mismatches (bullet_type → type)
+- ✅ Fixed API calls (add() → add_bullet())
+- ✅ Fixed ChromaDB empty where clause
+- ✅ Fixed datetime timezone handling
+
+---
+
+## Phase 4.5: Hemisphere Classification & Staging 🚧 NEW - IN PROGRESS
+
+### Meta-Bullets System
+- ✅ Meta-bullet definitions (left/right hemisphere patterns)
+- ✅ Meta-bullet installation system
+- ✅ Self-referential classification (bullets classify bullets)
+- ❌ Meta-bullets installed to procedural memory
+
+### Hemisphere Classifier
+- ✅ HemisphereClassifier class created
+- ✅ Pattern-based scoring using meta-bullets
+- ✅ LLM fallback for ambiguous cases
+- ✅ Classification confidence scoring
+- ❌ Classifier integrated into learning pipeline
+
+### Staging Area
+- ✅ STAGED bullet status added to BulletStatus enum
+- ✅ STAGING hemisphere added to Hemisphere enum
+- ✅ Design document created (STAGING_AREA_DESIGN.md)
+- ✅ procedural_staging collection implementation
+- ✅ Staging API methods (add, assign, reject)
+- ✅ Auto-assignment workflow (classifier-driven; requires meta-bullets installed)
+- ⏸️ Manual review UI (basic table added; full workflow deferred)
+
+### Integration Points
+- ✅ Curator sends insights to staging (not directly to hemispheres)
+- ✅ Classifier runs on staged bullets
+- ✅ High-confidence auto-assignment (>0.85)
+- ✅ Low-confidence manual review flagging (<0.85)
+
+**Critical Gap Identified**: Bullets currently assigned based on executor, not content cognitive style
 
 ---
 
@@ -176,11 +210,21 @@ Last Updated: December 24, 2025
 - ⏸️ Learning analytics for tools (deferred)
 - ⏸️ Visual tool flow (deferred)
 
+### Staging Review Queue (Phase D2) - NEW
+- ✅ Bullet review queue page (basic)
+- ⏸️ Staged bullets table with classification suggestions
+- ⏸️ Detail modal for flagged bullets
+- ⏸️ Bulk assignment actions
+- ⏸️ Manual review workflow
+
 ### Backend API
 - ✅ REST API endpoints (chat, system status, MCP servers)
 - ✅ WebSocket events (status updates)
 - ✅ Bicameral mind service integration
-- ⏸️ MCP service bridge (basic version complete)
+- ✅ MCP service bridge (basic version complete)
+- ✅ Staging API endpoints (list_staged, assign, reject)
+- ✅ Tool registry endpoints (list/search/register/execute)
+- ✅ Procedure CRUD endpoints
 
 ### Polish & Integration (Phase E)
 - ❌ Animations and transitions
@@ -191,7 +235,7 @@ Last Updated: December 24, 2025
 
 ---
 
-## Phase 6: Cross-Hemisphere Learning dYs IN PROGRESS
+## Phase 6: Cross-Hemisphere Learning ✅ COMPLETE (Core)
 
 ### Suggestion System (Optional)
 - ✅ Cross-hemisphere bullet suggestions
@@ -216,108 +260,62 @@ Last Updated: December 24, 2025
 
 ---
 
+## CRITICAL GAPS IDENTIFIED (December 25, 2025)
 
-## Phase 7: Episodic Memory Integration ❌ NOT STARTED
+### 1. Bullets Not Retrieved During Generation ⚠️ CRITICAL
+**Problem**: Agents call LLM directly without retrieving procedural memory
+- LeftBrain.process() doesn't call memory.retrieve()
+- RightBrain.process() doesn't call memory.retrieve()
+- Bullets exist but are never used during execution
+- System can't learn from past experiences
 
-### Trace Storage
-- ❌ Long-term execution trace storage
-- ❌ Trace indexing and retrieval
-- ❌ Trace compression/summarization
-- ❌ Trace pruning policies
-- ❌ Trace-bullet linking
+**Impact**: Defeats entire ACE/learning architecture
 
-### Pattern Recognition
-- ❌ Pattern recognition across episodes
-- ❌ Causal chain analysis
-- ❌ Success/failure pattern detection
-- ❌ Temporal pattern recognition
-- ❌ Context-sensitive retrieval
+**Fix Needed**:
+1. Wire bullet retrieval into agent prompts
+2. Format bullets for LLM context
+3. Track which bullets were used
+4. Generate execution traces properly
 
-### Trace Replay
-- ❌ Trace replay for validation
-- ❌ Counter-factual analysis
-- ❌ What-if scenario testing
-- ❌ Learning validation via replay
-- ❌ Debugging support
+### 2. Hemisphere Assignment Based on Executor, Not Content ⚠️ CRITICAL
+**Problem**: Bullets assigned to hemisphere based on which agent executed, not insight cognitive style
+- Left brain executing can create right-brain insights (and vice versa)
+- No validation that bullet content matches hemisphere
+- Risk of cognitive contamination over time
 
----
+**Impact**: Violates cognitive diversity principle
 
-## Phase 8: Multi-Modal Learning ❌ NOT STARTED
+**Fix Needed**:
+1. Implement staging area (Phase 4.5)
+2. Use meta-bullets for classification
+3. High-confidence auto-assign, low-confidence manual review
 
-### Visual Processing
-- ❌ Image input support
-- ❌ Visual trace analysis
-- ❌ Screenshot-based insights
-- ❌ Visual bullet creation
-- ❌ Image embedding integration
+### 3. Questions Not Implemented
+**Problem**: Agents never ask clarifying/exploratory questions
+- Design calls for left brain binary questions
+- Design calls for right brain open-ended questions
+- QUESTION bullet type doesn't exist
+- No question-asking strategy bullets
 
-### Audio/Speech
-- ❌ Audio input support
-- ❌ Speech-to-text integration
-- ❌ Audio-based insights
-- ❌ Voice command support
-- ❌ Audio trace logging
+**Impact**: System can't handle ambiguity or explore effectively
 
-### Multi-Modal Fusion
-- ❌ Cross-modal insight extraction
-- ❌ Multi-modal bullet representation
-- ❌ Unified embedding space
-- ❌ Modal priority/weighting
-- ❌ Multi-modal retrieval
+**Fix Needed**:
+1. Add QUESTION bullet type
+2. Implement question-asking logic in agents
+3. Create question template bullets
 
----
+### 4. Tool Integration Gaps
+**Problem**: MCP client exists but not wired to runtime
+- UI can't execute tools
+- No end-to-end tool → learning flow
+- Tool executor doesn't retrieve bullets
 
-## Phase 9: Meta-Cognitive Planner ❌ NOT STARTED
+**Impact**: Phase 3 incomplete
 
-### Planning System
-- ❌ Complex task decomposition
-- ❌ Multi-step planning
-- ❌ Resource allocation
-- ❌ Dependency management
-- ❌ Plan execution tracking
-
-### Coordination
-- ❌ Hemisphere coordination
-- ❌ Tool orchestration
-- ❌ Parallel task execution
-- ❌ Error recovery planning
-- ❌ Adaptive re-planning
-
----
-
-## Phase 10: GAN-Based Generative Learning ❌ NOT STARTED
-
-### Generative System
-- ❌ Pattern generation (synthetic training data)
-- ❌ Adversarial validation
-- ❌ Self-play scenarios
-- ❌ Hypothesis generation
-- ❌ Exploration amplification
-
-### Generator-Discriminator Loop
-- ❌ Right brain as generator
-- ❌ Left brain as discriminator
-- ❌ Quality assessment
-- ❌ Iterative improvement
-- ❌ Novelty injection
-
----
-
-## Phase 11: Long-Term Memory Consolidation ❌ NOT STARTED
-
-### Memory Consolidation
-- ❌ Periodic consolidation cycles
-- ❌ Sleep-like consolidation phases
-- ❌ Memory compression
-- ❌ Pattern abstraction
-- ❌ Hierarchical memory organization
-
-### Forgetting Mechanisms
-- ❌ Graceful degradation
-- ❌ Importance-weighted retention
-- ❌ Interference management
-- ❌ Memory reconstruction
-- ❌ False memory prevention
+**Fix Needed**:
+1. Wire MCP client to FastAPI backend
+2. Create tool execution endpoints
+3. Connect tool executor to bullet retrieval
 
 ---
 
@@ -368,16 +366,6 @@ Last Updated: December 24, 2025
 - ❌ Create standalone usage examples
 - ❌ Add documentation (AGENTIC_RAG.md)
 
-### Future RAG Enhancements
-- ❌ Multi-document synthesis
-- ❌ Citation tracking
-- ❌ Grounding verification
-- ❌ Hallucination detection
-- ❌ Dynamic knowledge updates
-- ❌ RAG-specific bullet learning
-- ❌ Query expansion strategies
-- ❌ Relevance scoring improvements
-
 ---
 
 ## Testing & Quality
@@ -386,6 +374,7 @@ Last Updated: December 24, 2025
 - ✅ Procedural memory unit tests
 - ✅ Learning pipeline tests
 - ✅ Tick generation tests
+- ✅ Phase 4 maintenance tests (all passing)
 - ❌ Integration test suite
 - ❌ End-to-end system tests
 - ❌ Performance benchmarks
@@ -404,123 +393,28 @@ Last Updated: December 24, 2025
 ## Documentation
 
 ### Current Documentation
-- ✅ README.md
+- ✅ README.md (comprehensive, up to date)
 - ✅ QUICK_START.md
 - ✅ IMPLEMENTATION_STATUS.md
 - ✅ Bicameral_Mind_Handoff.md
 - ✅ PROCEDURAL_MEMORY_IMPLEMENTATION.md
 - ✅ PHASE2_LEARNING_PIPELINE.md
 - ✅ PHASE2_5_TICK_GENERATION.md
+- ✅ PHASE3_MCP_INTEGRATION.md
+- ✅ PHASE4_DEDUPLICATION_PRUNING.md
+- ✅ STAGING_AREA_DESIGN.md (NEW)
+- 🔄 DESKTOP_UI_DESIGN.md (needs update)
+- 🔄 TOOL_REGISTRY.md (needs update for LangChain vs MCP decision)
 
-### Future Documentation
-- ❌ API reference documentation
-- ❌ Architecture decision records (ADRs)
-- ❌ Performance tuning guide
-- ❌ Deployment guide
-- ❌ Troubleshooting guide
-- ❌ Developer onboarding guide
-- ❌ User manual
+### Documentation to Remove/Archive
+- ❌ DESKTOP_UI_SIMPLE.md (superseded by DESKTOP_UI_DESIGN.md)
+- ❌ PROCEDURE_CHEATSHEETS_PLAN.md (outdated concept)
 
----
-
-## Deployment & Operations
-
-### Local Deployment
-- ✅ Single-machine setup
-- ✅ Ollama integration
-- ✅ Consumer hardware support (RTX 4080)
-- ❌ Docker containerization
-- ❌ Hardware requirement documentation
-
-### Production Readiness
-- ❌ Health monitoring
-- ❌ Metrics collection
-- ❌ Alerting system
-- ❌ Backup/restore procedures
-- ❌ Upgrade/migration tools
-- ❌ Performance optimization
-- ❌ Resource management
-
----
-
-## Guardrails & Safety
-
-### Design Principles
-- ✅ No anthropomorphism
-- ✅ No summaries of procedural memory
-- ✅ Outcome-based learning only
-- ✅ Ticks gate reflection, NOT scoring
-- ✅ Bullets, NOT summaries
-
-### Safety Mechanisms
-- ❌ Rate limiting
-- ❌ Resource quotas
-- ❌ Harmful content filtering
-- ❌ Privacy protection
-- ❌ Data retention policies
-- ❌ Audit logging
-- ❌ Access control
-
----
-
-## Performance & Optimization
-
-### Current Performance
-- ✅ Vector search optimization
-- ✅ Efficient bullet retrieval
-- ❌ Caching layer
-- ❌ Query optimization
-- ❌ Batch processing
-- ❌ Parallel execution
-
-### Scalability
-- ❌ Horizontal scaling support
-- ❌ Load balancing
-- ❌ Distributed memory
-- ❌ Sharding strategies
-- ❌ Performance benchmarks
-
----
-
-## Integration & Extensibility
-
-### Current Integrations
-- ✅ Ollama (LLM backend)
-- ✅ ChromaDB (vector store)
-- ✅ Sentence Transformers (embeddings)
-- ✅ MCP (Model Context Protocol)
-
-### Future Integrations
-- ❌ Alternative LLM backends (LocalAI, vLLM)
-- ❌ Alternative vector stores (FAISS, Pinecone)
-- ❌ Alternative embedding models
-- ❌ Observability tools (Prometheus, Grafana)
-- ❌ Workflow engines
-
-### Plugin System
-- ❌ Plugin architecture
-- ❌ Custom tool support
-- ❌ Custom memory backends
-- ❌ Custom reflection strategies
-- ❌ Custom curation logic
-
----
-
-## Research & Experimentation
-
-### Experimental Features
-- ❌ Meta-learning experiments
-- ❌ Transfer learning
-- ❌ Few-shot bullet generation
-- ❌ Curriculum learning
-- ❌ Active learning strategies
-
-### Metrics & Analysis
-- ❌ Learning effectiveness metrics
-- ❌ Bullet quality scoring
-- ❌ Hemisphere divergence analysis
-- ❌ Novelty distribution analysis
-- ❌ A/B testing framework
+### Future Documentation Needed
+- ❌ HEMISPHERE_CLASSIFICATION.md (meta-bullets system)
+- ❌ BULLET_RETRIEVAL_GUIDE.md (how to wire bullets into agents)
+- ❌ API_REFERENCE.md (FastAPI endpoints)
+- ❌ TROUBLESHOOTING.md
 
 ---
 
@@ -530,12 +424,14 @@ Last Updated: December 24, 2025
 - ✅ Procedural memory MUST use bullets, NEVER summaries
 - ✅ Hemispheres MUST remain separate (no direct overwrites)
 - ✅ Shared memory ONLY via validated promotion
+- 🚧 Hemisphere assignment based on CONTENT, not executor (in progress)
 
 ### Learning
 - ✅ Outcomes update SCORES (helpful/harmful)
 - ✅ Ticks gate REFLECTION DEPTH, not scoring
 - ✅ Add incrementally, NEVER rewrite wholesale
 - ✅ Start QUARANTINED, promote with validation
+- 🚧 Bullets retrieved during generation (NOT IMPLEMENTED YET)
 
 ### Architecture
 - ✅ Left = Pattern continuity (exploit)
@@ -547,27 +443,52 @@ Last Updated: December 24, 2025
 
 ## Next Immediate Tasks (Priority Order)
 
-1. **Phase 5: Desktop UI** (Current Priority)
-   - Review DESKTOP_UI_DESIGN.md
-   - Set up Electron + React + TypeScript project
-   - Create FastAPI backend with WebSocket support
-   - Implement Dashboard component
-   - Implement Conversation Interface
-   - Implement MCP Tool Monitor
+### 1. **Fix Critical Gap: Wire Bullets into Agent Prompts** ⚠️ HIGHEST PRIORITY
+   - Modify LeftBrain.process() to retrieve bullets
+   - Modify RightBrain.process() to retrieve bullets
+   - Create format_bullets_for_prompt() utility
+   - Include bullets in LLM context
+   - Track bullet_ids for outcome recording
+   - Test end-to-end: query → retrieval → generation → learning
 
-2. **RAG Maintenance**
-   - Remove unicode/emoji from logging
-   - Create test suite (tests/test_agentic_rag.py)
-   - Create standalone usage examples
-   - Add documentation (AGENTIC_RAG.md)
+### 2. **Implement Staging & Classification** (Phase 4.5)
+   - Install meta-bullets to procedural memory
+   - Create procedural_staging collection
+   - Implement staging API methods
+   - Wire classifier into curation flow
+   - Test classification accuracy
 
-3. **Phase 6: Cross-Hemisphere Learning (Metrics/Monitoring)**
-   - Add suggestion learning metrics
-   - Add teaching effectiveness metrics
-   - Add cognitive diversity monitoring
-   - Add hemisphere specialization tracking
+### 3. **Add Question Support**
+   - Add QUESTION bullet type to enum
+   - Create question template bullets
+   - Implement question-asking logic in agents
+   - Wire questions into response generation
 
-4. **Testing Infrastructure**
-   - Integration test framework
-   - End-to-end test scenarios
-   - Performance benchmarks
+### 4. **Phase 5: Desktop UI - Staging Review Queue**
+   - Create bullet review page
+   - Implement manual assignment workflow
+   - Add bulk operations
+   - Test classification UI
+
+### 5. **End-to-End Integration Testing**
+   - Create comprehensive integration tests
+   - Test: user query → bullet retrieval → LLM → response → learning
+   - Test: tool execution → trace → reflection → staging → assignment
+   - Verify no regressions
+
+### 6. **Documentation Updates**
+   - Create HEMISPHERE_CLASSIFICATION.md
+   - Update TOOL_REGISTRY.md with LangChain decision
+   - Remove obsolete docs
+   - Update README with new Phase 4.5
+
+---
+
+## Future Phases (Phase 7+) ❌ NOT STARTED
+
+See archived sections for:
+- Phase 7: Episodic Memory Integration
+- Phase 8: Multi-Modal Learning
+- Phase 9: Meta-Cognitive Planner
+- Phase 10: GAN-Based Generative Learning
+- Phase 11: Long-Term Memory Consolidation

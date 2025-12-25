@@ -1,6 +1,8 @@
 """Left Brain: Pattern Recognition and Replication"""
 from core.base_agent import BrainAgent, Message, MessageType
-from typing import Dict, Any, List
+from core.memory import ProceduralMemory, Hemisphere
+from core.memory.bullet_formatter import format_bullets_for_prompt, extract_bullet_ids
+from typing import Dict, Any, List, Optional
 import asyncio
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -14,11 +16,21 @@ class LeftBrain(BrainAgent):
     - Optimizes and exploits
     - Binary decision-making
     """
-    
-    def __init__(self, config: Dict[str, Any], llm_client):
+
+    def __init__(
+        self,
+        config: Dict[str, Any],
+        llm_client,
+        procedural_memory: Optional[ProceduralMemory] = None
+    ):
         super().__init__("LeftBrain", config.get("left_brain", {}))
         self.llm = llm_client
-        self.known_patterns = []
+        self.memory = procedural_memory
+
+        # Configuration for bullet retrieval
+        self.k_bullets = config.get("left_brain", {}).get("k_bullets", 8)
+        self.min_confidence = config.get("left_brain", {}).get("min_bullet_confidence", 0.5)
+
         self.decision_template = ChatPromptTemplate.from_messages([
             ("system", """You are the LEFT HEMISPHERE of a bicameral mind.
 Your role: PATTERN RECOGNITION and REPLICATION.
@@ -35,145 +47,157 @@ When uncertain: Explicitly state "UNDECIDABLE - needs exploration"
 """),
             ("human", "{input}")
         ])
-    
+
     async def process(self, message: Message) -> Message:
-        """Process message through pattern recognition lens"""
-        
+        """Process message through pattern recognition lens with procedural memory."""
+
         # Extract content
         content = message.content
-        
-        # Recognize pattern
-        pattern_match = await self.recognize_pattern(content)
-        
-        # Generate response based on pattern match
-        if pattern_match["matched"]:
-            response = await self.generate({
-                "task": "replicate",
-                "pattern": pattern_match,
-                "context": content
-            })
+
+        # Extract user query from content
+        user_query = content.get("input", str(content))
+
+        # Step 1: Retrieve relevant procedural memory bullets
+        bullets = []
+        bullet_ids = []
+
+        if self.memory and self.memory.enabled:
+            bullets, bullet_ids = self.memory.retrieve(
+                query=user_query,
+                side=Hemisphere.LEFT,
+                k=self.k_bullets,
+                min_confidence=self.min_confidence,
+                include_shared=True
+            )
+
+        # Step 2: Format bullets for LLM context
+        bullet_context = format_bullets_for_prompt(bullets) if bullets else ""
+
+        # Step 3: Build enhanced prompt with procedural knowledge
+        if bullet_context:
+            enhanced_query = f"""PROCEDURAL KNOWLEDGE (Learned from experience):
+{bullet_context}
+
+USER QUERY:
+{user_query}
+
+Based on your procedural knowledge above, provide a precise, structured response.
+Apply relevant rules, follow best practices, and warn about pitfalls.
+If knowledge is insufficient, state "UNDECIDABLE - needs exploration"
+"""
         else:
-            response = {
-                "status": "no_match",
-                "signal": "EXPLORATION_NEEDED",
-                "confidence": 0.0
-            }
-        
-        # Update state
+            enhanced_query = f"""USER QUERY:
+{user_query}
+
+No procedural knowledge available yet for this query.
+Provide your best structured response based on general knowledge.
+"""
+
+        # Step 4: Generate response
+        chain = self.decision_template | self.llm
+        response = await chain.ainvoke({"input": enhanced_query})
+
+        response_text = response.content if hasattr(response, 'content') else str(response)
+
+        # Step 5: Determine confidence based on bullet availability
+        confidence = 0.8 if bullets else 0.3
+
+        # Step 6: Update state
         self.update_state(
-            confidence=pattern_match.get("confidence", 0.0),
-            entropy=1.0 - pattern_match.get("confidence", 0.0),
-            last_pattern=pattern_match.get("pattern_id"),
+            confidence=confidence,
+            entropy=1.0 - confidence,
             active=True
         )
-        
+
+        # Step 7: Return response with metadata
         return Message(
             sender=self.name,
             receiver=message.sender,
             msg_type=MessageType.RESULT,
-            content=response,
-            metadata={"state": self.state}
-        )
-    
-    async def recognize_pattern(self, data: Any) -> Dict[str, Any]:
-        """Check if data matches known patterns"""
-        
-        # Prepare recognition query
-        query = f"""Analyze this input and determine:
-1. Does it match a known structure/pattern?
-2. Can it be classified categorically?
-3. Is there a clear decision boundary?
-
-Input: {data}
-
-Known patterns: {self.known_patterns[:5] if self.known_patterns else 'None yet'}
-
-Respond in format:
-MATCHED: yes/no
-PATTERN_ID: [identifier if matched]
-CONFIDENCE: [0.0-1.0]
-CATEGORY: [if applicable]
-DECISION: [if decidable]
-"""
-        
-        # Query LLM
-        chain = self.decision_template | self.llm
-        response = await chain.ainvoke({"input": query})
-        
-        # Parse response
-        result = self._parse_recognition(response.content if hasattr(response, 'content') else str(response))
-        
-        # Store if new pattern
-        if result["matched"] and result.get("pattern_id"):
-            self._store_pattern(result["pattern_id"], data)
-        
-        return result
-    
-    async def generate(self, context: Dict[str, Any]) -> Any:
-        """Generate output by replicating known pattern"""
-        
-        if context["task"] == "replicate":
-            pattern = context["pattern"]
-            
-            query = f"""Replicate this pattern accurately:
-Pattern: {pattern.get('pattern_id')}
-Context: {context.get('context')}
-
-Apply the known pattern to generate a response.
-Maintain consistency and structure.
-"""
-            
-            chain = self.decision_template | self.llm
-            response = await chain.ainvoke({"input": query})
-            
-            return {
-                "type": "replication",
-                "pattern": pattern.get("pattern_id"),
-                "output": response.content if hasattr(response, 'content') else str(response),
-                "confidence": pattern.get("confidence", 0.0)
+            content=response_text,
+            metadata={
+                "state": self.state,
+                "bullets_used": bullet_ids,  # Track for outcome recording
+                "bullets_count": len(bullets),
+                "had_knowledge": len(bullets) > 0
             }
-        
-        return {"error": "Unknown task"}
-    
-    def _parse_recognition(self, text: str) -> Dict[str, Any]:
-        """Parse LLM recognition response"""
-        lines = text.strip().split('\n')
-        result = {
+        )
+
+    async def recognize_pattern(self, data: Any) -> Dict[str, Any]:
+        """
+        Check if data matches known patterns (legacy method).
+
+        Note: This is now handled by procedural memory retrieval.
+        Keeping for backward compatibility.
+        """
+        # This is now replaced by bullet retrieval in process()
+        # But we keep it for any code that calls it directly
+
+        if self.memory and self.memory.enabled:
+            # Use procedural memory
+            bullets, _ = self.memory.retrieve(
+                query=str(data),
+                side=Hemisphere.LEFT,
+                k=3,
+                include_shared=True
+            )
+
+            if bullets:
+                return {
+                    "matched": True,
+                    "pattern_id": f"procedural_pattern_{bullets[0].id[:8]}",
+                    "confidence": bullets[0].confidence,
+                    "category": bullets[0].type.value,
+                    "decision": bullets[0].text
+                }
+
+        # Fallback to no match
+        return {
             "matched": False,
             "pattern_id": None,
             "confidence": 0.0,
             "category": None,
             "decision": None
         }
-        
-        for line in lines:
-            if "MATCHED:" in line:
-                result["matched"] = "yes" in line.lower()
-            elif "PATTERN_ID:" in line:
-                result["pattern_id"] = line.split(":", 1)[1].strip()
-            elif "CONFIDENCE:" in line:
-                try:
-                    result["confidence"] = float(line.split(":", 1)[1].strip())
-                except:
-                    result["confidence"] = 0.5
-            elif "CATEGORY:" in line:
-                result["category"] = line.split(":", 1)[1].strip()
-            elif "DECISION:" in line:
-                result["decision"] = line.split(":", 1)[1].strip()
-        
-        return result
-    
-    def _store_pattern(self, pattern_id: str, example: Any):
-        """Store recognized pattern"""
-        if not any(p["id"] == pattern_id for p in self.known_patterns):
-            self.known_patterns.append({
-                "id": pattern_id,
-                "examples": [example],
-                "count": 1
-            })
-        else:
-            for p in self.known_patterns:
-                if p["id"] == pattern_id:
-                    p["examples"].append(example)
-                    p["count"] += 1
-                    break
+
+    async def generate(self, context: Dict[str, Any]) -> Any:
+        """
+        Generate output (legacy method).
+
+        Note: Generation now happens in process() with bullets integrated.
+        Keeping for backward compatibility.
+        """
+        task = context.get("task", "")
+
+        if task == "replicate":
+            # Use procedural memory if available
+            if self.memory and self.memory.enabled:
+                query = str(context.get("context", ""))
+                bullets, _ = self.memory.retrieve(
+                    query=query,
+                    side=Hemisphere.LEFT,
+                    k=5,
+                    include_shared=True
+                )
+
+                if bullets:
+                    bullet_text = format_bullets_for_prompt(bullets)
+                    enhanced_query = f"""PROCEDURAL KNOWLEDGE:
+{bullet_text}
+
+CONTEXT: {context.get('context')}
+
+Apply the procedural knowledge to generate a response.
+"""
+                    chain = self.decision_template | self.llm
+                    response = await chain.ainvoke({"input": enhanced_query})
+
+                    return {
+                        "type": "replication",
+                        "pattern": "procedural_memory",
+                        "output": response.content if hasattr(response, 'content') else str(response),
+                        "confidence": bullets[0].confidence if bullets else 0.0
+                    }
+
+        # Fallback
+        return {"error": "Unknown task or no memory available"}

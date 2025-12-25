@@ -31,6 +31,7 @@ class BulletType(str, Enum):
 class BulletStatus(str, Enum):
     """Lifecycle status of a bullet."""
 
+    STAGED = "staged"                # New, awaiting hemisphere assignment
     ACTIVE = "active"                # Actively used
     QUARANTINED = "quarantined"      # New, needs validation
     DEPRECATED = "deprecated"        # No longer used
@@ -42,6 +43,7 @@ class Hemisphere(str, Enum):
     LEFT = "left"                    # Left brain (pattern continuity)
     RIGHT = "right"                  # Right brain (pattern violation)
     SHARED = "shared"                # Consensus memory
+    STAGING = "staging"              # Not yet assigned
 
 
 @dataclass

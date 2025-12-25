@@ -11,6 +11,7 @@ from .registry import ToolRegistry
 from .index import ToolIndex, ToolSearchResult
 from .executor import ToolExecutor
 from .loader import initialize_tools
+from .loader import register_mcp_tools
 from .providers import (
     CLIToolProvider,
     HTTPToolProvider,
@@ -33,4 +34,5 @@ __all__ = [
     "LocalToolProvider",
     "MCPToolProvider",
     "initialize_tools",
+    "register_mcp_tools",
 ]

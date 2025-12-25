@@ -100,6 +100,7 @@ class SuggestionDelivery:
                 "origin_bullet_id": suggestion.origin_bullet_id,
                 "taught_from": suggestion.from_side,
             },
+            stage=False,
         )
 
         if self.conflict_detector.enabled:

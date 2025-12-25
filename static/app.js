@@ -95,7 +95,7 @@ async function fetchStatus() {
         const response = await fetch('/api/system/status');
         const data = await response.json();
 
-        const memory = data.memory || { left: 0, right: 0, shared: 0 };
+        const memory = data.memory || { left: 0, right: 0, shared: 0, staging: 0 };
         const mode = data.mode ? data.mode.toUpperCase() : '-';
         const hemisphere = data.hemisphere ? data.hemisphere.toUpperCase() : '-';
         const tickRate = typeof data.tick_rate === 'number' ? data.tick_rate.toFixed(2) : '-';
@@ -113,6 +113,8 @@ async function fetchStatus() {
         if (memoryLeft) memoryLeft.textContent = memory.left ?? '-';
         if (memoryRight) memoryRight.textContent = memory.right ?? '-';
         if (memoryShared) memoryShared.textContent = memory.shared ?? '-';
+        const memoryStaging = document.getElementById('memory-staging');
+        if (memoryStaging) memoryStaging.textContent = memory.staging ?? '-';
 
         const modeDetail = document.getElementById('mode-detail');
         if (modeDetail) modeDetail.textContent = mode;
@@ -146,6 +148,7 @@ async function fetchMemoryStats() {
         setText('memory-active', total.active ?? '-');
         setText('memory-quarantined', total.quarantined ?? '-');
         setText('memory-deprecated', total.deprecated ?? '-');
+        setText('memory-staged', total.staged ?? '-');
     } catch (error) {
         console.error('Failed to fetch memory stats:', error);
     }
@@ -156,21 +159,23 @@ async function fetchProcedures() {
     if (!list) return;
 
     try {
-        const response = await fetch('/api/memory/bullets?hemisphere=shared&limit=12');
+        const response = await fetch('/api/procedures');
         const data = await response.json();
-        if (!data.bullets || data.bullets.length === 0) {
+        const procedures = data.procedures || [];
+        if (!procedures.length) {
             list.innerHTML = '<div class="loading">No procedures yet</div>';
             return;
         }
-        list.innerHTML = data.bullets.map((bullet) => {
-            const tags = (bullet.tags || []).slice(0, 2).join(', ');
+        list.innerHTML = procedures.map((proc) => {
+            const tags = (proc.tags || []).slice(0, 3).join(', ');
             return `
                 <div class="procedure-card">
                     <div>
-                        <h3>${escapeHtml(bullet.text)}</h3>
-                        <p>${tags ? `Tags: ${escapeHtml(tags)}` : 'No tags'} | Score: ${bullet.score?.toFixed ? bullet.score.toFixed(2) : '0.00'}</p>
+                        <h3>${escapeHtml(proc.title || '')}</h3>
+                        <p>${escapeHtml(proc.description || '')}</p>
+                        <p>${tags ? `Tags: ${escapeHtml(tags)}` : 'No tags'} | Status: ${escapeHtml(proc.status || '')}</p>
                     </div>
-                    <span class="pill">${escapeHtml(bullet.side || 'shared')}</span>
+                    <span class="pill">${escapeHtml(proc.side || 'shared')}</span>
                 </div>
             `;
         }).join('');
@@ -178,6 +183,131 @@ async function fetchProcedures() {
         console.error('Failed to fetch procedures:', error);
         list.innerHTML = '<div class="loading">Failed to load procedures</div>';
     }
+}
+
+async function fetchTools() {
+    const table = document.getElementById('tool-table');
+    if (!table) return;
+    table.innerHTML = `
+        <div class="tool-row header">
+            <span>Tool</span>
+            <span>Provider</span>
+            <span>Status</span>
+        </div>
+        <div class="tool-row"><span>Loading...</span><span></span><span></span></div>
+    `;
+    try {
+        const response = await fetch('/api/tools');
+        const data = await response.json();
+        const tools = data.tools || [];
+        if (!tools.length) {
+            table.innerHTML = `
+                <div class="tool-row header">
+                    <span>Tool</span><span>Provider</span><span>Status</span>
+                </div>
+                <div class="tool-row"><span>No tools registered</span><span></span><span></span></div>
+            `;
+            return;
+        }
+        table.innerHTML = `
+            <div class="tool-row header">
+                <span>Tool</span><span>Provider</span><span>Status</span>
+            </div>
+            ${tools.map((tool) => {
+                const statusClass = tool.enabled ? 'pill ok' : 'pill warn';
+                return `
+                    <div class="tool-row">
+                        <span>${escapeHtml(tool.name)}</span>
+                        <span>${escapeHtml(tool.provider)}</span>
+                        <span class="${statusClass}">${tool.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                `;
+            }).join('')}
+        `;
+    } catch (error) {
+        console.error('Failed to fetch tools:', error);
+        table.innerHTML = '<div class="tool-row"><span>Failed to load tools</span><span></span><span></span></div>';
+    }
+}
+
+async function fetchStaged() {
+    const table = document.getElementById('staged-table');
+    if (!table) return;
+    table.innerHTML = `
+        <div class="tool-row header">
+            <span>Text</span><span>Confidence</span><span>Source</span><span>Actions</span>
+        </div>
+        <div class="tool-row"><span>Loading...</span><span></span><span></span><span></span></div>
+    `;
+    try {
+        const response = await fetch('/api/memory/staged');
+        const data = await response.json();
+        const bullets = data.bullets || [];
+        if (!bullets.length) {
+            table.innerHTML = `
+                <div class="tool-row header">
+                    <span>Text</span><span>Confidence</span><span>Source</span><span>Actions</span>
+                </div>
+                <div class="tool-row"><span>No staged bullets</span><span></span><span></span><span></span></div>
+            `;
+            return;
+        }
+        table.innerHTML = `
+            <div class="tool-row header">
+                <span>Text</span><span>Confidence</span><span>Source</span><span>Actions</span>
+            </div>
+            ${bullets.map((b) => {
+                const conf = (b.confidence ?? 0).toFixed ? b.confidence.toFixed(2) : b.confidence || '-';
+                const src = (b.metadata && b.metadata.source_hemisphere) ? b.metadata.source_hemisphere : '-';
+                return `
+                    <div class="tool-row">
+                        <span title="${escapeHtml(b.id)}">${escapeHtml(b.text || '')}</span>
+                        <span>${conf}</span>
+                        <span>${escapeHtml(src)}</span>
+                        <span class="actions">
+                            <button class="ghost-btn" data-action="assign-left" data-id="${b.id}">Assign Left</button>
+                            <button class="ghost-btn" data-action="assign-right" data-id="${b.id}">Assign Right</button>
+                            <button class="ghost-btn warn" data-action="reject" data-id="${b.id}">Reject</button>
+                        </span>
+                    </div>
+                `;
+            }).join('')}
+        `;
+        table.querySelectorAll('button').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                if (!id) return;
+                if (btn.dataset.action === 'assign-left') {
+                    await assignStaged(id, 'left');
+                } else if (btn.dataset.action === 'assign-right') {
+                    await assignStaged(id, 'right');
+                } else if (btn.dataset.action === 'reject') {
+                    await rejectStaged(id);
+                }
+                fetchStaged();
+                fetchMemoryStats();
+            });
+        });
+    } catch (error) {
+        console.error('Failed to fetch staged bullets:', error);
+        table.innerHTML = '<div class="tool-row"><span>Failed to load staged bullets</span><span></span><span></span><span></span></div>';
+    }
+}
+
+async function assignStaged(id, target) {
+    await fetch(`/api/memory/staged/${encodeURIComponent(id)}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target })
+    });
+}
+
+async function rejectStaged(id) {
+    await fetch(`/api/memory/staged/${encodeURIComponent(id)}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
 }
 
 async function fetchMCPServers() {
@@ -450,6 +580,8 @@ window.addEventListener('DOMContentLoaded', () => {
     fetchMemoryStats();
     fetchMCPServers();
     fetchProcedures();
+    fetchTools();
+    fetchStaged();
     updateAnalytics();
 
     setInterval(fetchStatus, 5000);
@@ -458,6 +590,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const refreshBtn = document.getElementById('refresh-procedures');
     if (refreshBtn) refreshBtn.addEventListener('click', fetchProcedures);
+    const refreshToolsBtn = document.getElementById('refresh-tools');
+    if (refreshToolsBtn) refreshToolsBtn.addEventListener('click', fetchTools);
+    const refreshStagedBtn = document.getElementById('refresh-staged');
+    if (refreshStagedBtn) refreshStagedBtn.addEventListener('click', fetchStaged);
 
     const searchInput = document.getElementById('procedure-search');
     if (searchInput) {

@@ -23,6 +23,7 @@ from loguru import logger
 from .bullet import Bullet, BulletType, BulletStatus, Hemisphere
 from .suggestion_store import Suggestion, SuggestionStore, _now_iso, _make_id
 from .procedural_memory import ProceduralMemory
+from .hemisphere_classifier import HemisphereClassifier
 from .reflector import ReflectionInsight, InsightType
 
 
@@ -50,6 +51,10 @@ class Curator:
         self.memory = memory
         self.suggestion_store = suggestion_store
         self.config = config or memory.get_cross_hemisphere_config()
+        self.classifier = HemisphereClassifier(memory, use_llm_fallback=False)
+
+    def _staging_config(self) -> Dict[str, Any]:
+        return (self.memory.config.get("procedural_memory", {}) or {}).get("staging", {}) or {}
 
     async def curate(
         self,
@@ -99,20 +104,74 @@ class Curator:
 
             # Add to memory if auto_add
             if auto_add:
-                created = self.memory.add(
-                    text=bullet.text,
-                    side=hemisphere,
-                    bullet_type=bullet.type,
-                    tags=bullet.tags,
-                    confidence=bullet.confidence,
-                    source_trace_id=bullet.source_trace_id,
-                    status=BulletStatus.QUARANTINED,  # Always start quarantined
-                )
-                bullets_created.append(created)
-                logger.info(
-                    f"  ✓ Created bullet: {created.id[:12]}... "
-                    f"[{bullet.type.value}] {bullet.text[:60]}..."
-                )
+                staging_cfg = self._staging_config()
+                staging_enabled = bool(staging_cfg.get("enabled", False))
+                auto_assign = bool(staging_cfg.get("auto_assign", False))
+                auto_threshold = float(staging_cfg.get("auto_assign_threshold", 0.85))
+                review_threshold = float(staging_cfg.get("manual_review_threshold", 0.7))
+
+                if staging_enabled:
+                    staged = self.memory.stage_bullet(
+                        text=bullet.text,
+                        source_hemisphere=hemisphere,
+                        bullet_type=bullet.type,
+                        tags=bullet.tags,
+                        confidence=bullet.confidence,
+                        source_trace_id=bullet.source_trace_id,
+                        metadata=bullet.metadata,
+                        auto_assign=auto_assign,
+                    )
+
+                    if auto_assign:
+                        result = await self.classifier.classify(
+                            bullet_text=bullet.text,
+                            bullet_type=bullet.type,
+                            source_hint=hemisphere,
+                            tags=bullet.tags,
+                        )
+                        if result.confidence >= auto_threshold and not result.ambiguous:
+                            assigned = self.memory.assign_staged_bullet(
+                                staged.id,
+                                result.hemisphere,
+                                reviewer="auto",
+                            )
+                            if assigned:
+                                bullets_created.append(assigned)
+                                logger.info(
+                                    f"  ✓ Auto-assigned bullet: {assigned.id[:12]}... "
+                                    f"to {assigned.side.value}"
+                                )
+                            else:
+                                bullets_created.append(staged)
+                        else:
+                            priority = "high" if result.confidence < review_threshold else "medium"
+                            self.memory.update_bullet_metadata(
+                                staged.id,
+                                {
+                                    "classifier_suggestion": result.hemisphere.value,
+                                    "classifier_confidence": result.confidence,
+                                    "classifier_reasoning": result.reasoning,
+                                    "review_priority": priority,
+                                },
+                            )
+                            bullets_created.append(staged)
+                    else:
+                        bullets_created.append(staged)
+                else:
+                    created = self.memory.add(
+                        text=bullet.text,
+                        side=hemisphere,
+                        bullet_type=bullet.type,
+                        tags=bullet.tags,
+                        confidence=bullet.confidence,
+                        source_trace_id=bullet.source_trace_id,
+                        status=BulletStatus.QUARANTINED,  # Always start quarantined
+                    )
+                    bullets_created.append(created)
+                    logger.info(
+                        f"  ✓ Created bullet: {created.id[:12]}... "
+                        f"[{bullet.type.value}] {bullet.text[:60]}..."
+                    )
             else:
                 bullets_created.append(bullet)
 

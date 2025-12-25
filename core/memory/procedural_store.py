@@ -62,16 +62,18 @@ class ProceduralBullet:
 class ProceduralMemoryStore:
     """Persistent vector store for procedural playbooks.
 
-    One *physical* Chroma persistence directory, with three collections:
+    One *physical* Chroma persistence directory, with four collections:
     - procedural_left
     - procedural_right
     - procedural_shared
+    - procedural_staging
     """
 
     COLLECTIONS = {
         "left": "procedural_left",
         "right": "procedural_right",
         "shared": "procedural_shared",
+        "staging": "procedural_staging",
     }
 
     def __init__(self, config: Dict[str, Any]):
@@ -331,7 +333,7 @@ class ProceduralMemoryStore:
 
     def _fetch_by_id(self, bullet_id: str) -> Optional[Tuple[str, Dict[str, Any], str]]:
         """Fetch metadata and document for a bullet id across collections."""
-        for side in ("left", "right", "shared"):
+        for side in ("left", "right", "shared", "staging"):
             col = self._collections[side]
             got = col.get(ids=[bullet_id], include=["metadatas", "documents"])
             if not got.get("ids"):
@@ -340,6 +342,32 @@ class ProceduralMemoryStore:
             doc = (got.get("documents") or [""])[0]
             return side, md, doc
         return None
+
+    def get_bullet(self, side: str, bullet_id: str) -> Optional[ProceduralBullet]:
+        """Fetch a bullet by id from a specific collection."""
+        if side not in self._collections:
+            raise ValueError(f"Invalid side '{side}'")
+        col = self._collections[side]
+        got = col.get(ids=[bullet_id], include=["metadatas", "documents"])
+        if not got.get("ids"):
+            return None
+        md = (got.get("metadatas") or [{}])[0] or {}
+        doc = (got.get("documents") or [""])[0]
+        return ProceduralBullet(
+            id=bullet_id,
+            text=doc,
+            side=side,
+            type=md.get("type", "heuristic"),
+            tags=[t for t in (md.get("tags") or "").split(",") if t],
+            status=md.get("status", "active"),
+            confidence=float(md.get("confidence", 0.5)),
+            helpful_count=int(md.get("helpful_count", 0)),
+            harmful_count=int(md.get("harmful_count", 0)),
+            created_at=md.get("created_at", ""),
+            last_used_at=md.get("last_used_at", ""),
+            source_trace_id=md.get("source_trace_id", ""),
+            metadata=self._split_metadata(md),
+        )
 
     def get_bullets_by_ids(self, bullet_ids: List[str]) -> List[ProceduralBullet]:
         """Fetch bullets by id across collections."""
@@ -429,6 +457,13 @@ class ProceduralMemoryStore:
         self._collections[side].upsert(ids=[bullet_id], documents=[doc], metadatas=[md])
         return True
 
+    def delete_bullet(self, side: str, bullet_id: str) -> bool:
+        """Delete a bullet from a collection."""
+        if side not in self._collections:
+            raise ValueError(f"Invalid side '{side}'")
+        self._collections[side].delete(ids=[bullet_id])
+        return True
+
     def set_status(self, bullet_id: str, status: str) -> bool:
         """Update lifecycle status for a bullet."""
         found = self._fetch_by_id(bullet_id)
@@ -455,6 +490,8 @@ class ProceduralMemoryStore:
         if not found:
             return
         side, md, doc = found
+        if side == "staging":
+            return
 
         if helpful:
             md["helpful_count"] = int(md.get("helpful_count", 0)) + 1

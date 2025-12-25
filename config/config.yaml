@@ -13,15 +13,19 @@ bicameral:
   left_brain:
     name: "PatternRecognition"
     focus: "stability"
+    k_bullets: 8  # Fewer bullets, higher precision
+    min_bullet_confidence: 0.5  # Higher confidence threshold
     behaviors:
       - "compress_patterns"
       - "classify"
       - "replicate_known"
       - "validate_consistency"
-    
+
   right_brain:
     name: "PatternMutation"
     focus: "exploration"
+    k_bullets: 12  # More bullets, more exploration
+    min_bullet_confidence: 0.3  # Lower confidence threshold for novelty
     behaviors:
       - "detect_anomalies"
       - "mutate_patterns"
@@ -146,6 +150,9 @@ memory:
   long_term_persistence: true
   consolidation_threshold: 10
 
+procedures:
+  path: "./data/memory/procedures.jsonl"
+
 # Procedural Memory Configuration (ACE-style)
 procedural_memory:
   enabled: true
@@ -167,6 +174,13 @@ procedural_memory:
     auto_curate: true
     min_insight_confidence: 0.5
     deep_reflection_llm: true
+
+  # Staging configuration (hemisphere assignment gate)
+  staging:
+    enabled: true
+    auto_assign: false
+    auto_assign_threshold: 0.85
+    manual_review_threshold: 0.7
 
   # Maintenance configuration (Phase 4)
   maintenance:

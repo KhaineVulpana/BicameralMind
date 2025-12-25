@@ -11,6 +11,12 @@ from core.meta_controller.controller import MetaController, CognitiveMode
 from core.base_agent import Message, MessageType
 from integrations.rag.agentic_rag import AgenticRAG
 from core.memory import ProceduralMemory
+from core.tools import initialize_tools, register_mcp_tools
+
+try:
+    from integrations.mcp import MCPClient
+except Exception:
+    MCPClient = None
 
 
 class BicameralMind:
@@ -38,21 +44,36 @@ class BicameralMind:
             model=model_config.get("name", "qwen2.5:14b"),
             temperature=model_config.get("temperature", 0.7)
         )
-        
-        # Initialize brain hemispheres
-        self.left_brain = LeftBrain(self.config, self.llm)
-        self.right_brain = RightBrain(self.config, self.llm)
-        
+
+        # Initialize procedural memory FIRST
+        self.memory = ProceduralMemory(self.config)
+
+        # Initialize brain hemispheres WITH procedural memory
+        self.left_brain = LeftBrain(self.config, self.llm, procedural_memory=self.memory)
+        self.right_brain = RightBrain(self.config, self.llm, procedural_memory=self.memory)
+
         # Initialize meta-controller
         self.meta_controller = MetaController(
             self.config,
             self.left_brain,
             self.right_brain
         )
-        
-        # Initialize procedural memory
-        self.memory = ProceduralMemory(self.config)
 
+        # Initialize tool system (framework-agnostic)
+        self.mcp_client = None
+        if self.config.get("mcp", {}).get("enabled", False) and MCPClient:
+            self.mcp_client = MCPClient(self.config)
+
+        try:
+            self.tool_registry, self.tool_executor, self.tool_index = initialize_tools(
+                self.config,
+                mcp_client=self.mcp_client,
+            )
+        except Exception as e:
+            logger.warning(f"Tool system initialization failed: {e}")
+            self.tool_registry = None
+            self.tool_executor = None
+            self.tool_index = None
 
         # Initialize RAG if enabled
         self.rag = None
@@ -71,6 +92,19 @@ class BicameralMind:
         
         # Start meta-controller tick system
         asyncio.create_task(self.meta_controller.start_ticker())
+
+        # Connect MCP and register MCP tools if enabled
+        if self.mcp_client and self.config.get("mcp", {}).get("enabled", False):
+            try:
+                await self.mcp_client.connect()
+                if self.tool_registry:
+                    await register_mcp_tools(
+                        self.tool_registry,
+                        self.tool_index,
+                        self.mcp_client,
+                    )
+            except Exception as e:
+                logger.warning(f"MCP connect/register failed: {e}")
         
         logger.success("✨ Bicameral Mind activated")
     
@@ -78,6 +112,12 @@ class BicameralMind:
         """Stop the system"""
         self.running = False
         self.meta_controller.stop_ticker()
+        if self.mcp_client:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.mcp_client.disconnect())
+            except RuntimeError:
+                pass
         logger.info("Bicameral Mind deactivated")
     
     async def process(self, user_input: str, use_rag: bool = True) -> Dict[str, Any]:

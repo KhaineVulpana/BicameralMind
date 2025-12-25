@@ -19,6 +19,8 @@ from .suggestion_delivery import SuggestionDelivery, can_deliver_suggestions
 from .teaching import TeachingAPI
 from .conflict_detector import ConflictDetector
 from .diversity_metrics import DiversityMetrics
+from .procedure_store import ProcedureStore, Procedure, ProcedureStatus, ProcedureStep, ProcedureStepType
+from .bullet_formatter import format_bullets_for_prompt, format_bullets_compact, format_bullets_with_metadata
 
 # Phase 4: Maintenance
 from .deduplicator import Deduplicator, DuplicateCluster
@@ -59,6 +61,11 @@ __all__ = [
     'TeachingAPI',
     'ConflictDetector',
     'DiversityMetrics',
+    'ProcedureStore',
+    'Procedure',
+    'ProcedureStatus',
+    'ProcedureStep',
+    'ProcedureStepType',
 
     # Maintenance (Phase 4)
     'Deduplicator',
@@ -81,4 +88,7 @@ __all__ = [
 
     # Utilities
     'create_trace',
+    'format_bullets_for_prompt',
+    'format_bullets_compact',
+    'format_bullets_with_metadata',
 ]

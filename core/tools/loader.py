@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from .models import ToolDefinition
+from .models import ToolDefinition, ToolProvider
 from .registry import ToolRegistry
 from .index import ToolIndex
 from .executor import ToolExecutor
@@ -65,8 +65,11 @@ def initialize_tools(
 
     tool_index = None
     if auto_index:
-        tool_index = ToolIndex(config)
-        tool_index.index_tools(registry.list_tools(enabled_only=False))
+        try:
+            tool_index = ToolIndex(config)
+            tool_index.index_tools(registry.list_tools(enabled_only=False))
+        except Exception as exc:
+            logger.warning(f"Tool index unavailable: {exc}")
 
     executor = ToolExecutor(
         registry=registry,
@@ -78,3 +81,44 @@ def initialize_tools(
     )
 
     return registry, executor, tool_index
+
+
+async def register_mcp_tools(
+    registry: ToolRegistry,
+    tool_index: Optional[ToolIndex],
+    mcp_client: Any,
+) -> int:
+    """Register MCP tools into the registry and index."""
+    if not mcp_client:
+        return 0
+    try:
+        tools = await mcp_client.list_tools()
+    except Exception as exc:
+        logger.warning(f"Failed to list MCP tools: {exc}")
+        return 0
+
+    definitions: List[ToolDefinition] = []
+    for tool in tools:
+        tags = ["mcp"]
+        server_name = getattr(tool, "server_name", "")
+        if server_name:
+            tags.append(server_name)
+        definitions.append(
+            ToolDefinition(
+                name=tool.name,
+                description=tool.description or "",
+                provider=ToolProvider.MCP,
+                input_schema=tool.parameters or {},
+                output_schema=tool.schema or {},
+                tags=tags,
+                config={"server": server_name},
+            )
+        )
+
+    if not definitions:
+        return 0
+
+    registry.register_many(definitions, save=True)
+    if tool_index:
+        tool_index.index_tools(definitions)
+    return len(definitions)
