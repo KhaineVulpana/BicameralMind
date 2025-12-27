@@ -15,6 +15,8 @@ from core.memory import ProceduralMemory, Hemisphere, BulletType, BulletStatus
 from core.left_brain.agent import LeftBrain
 from core.right_brain.agent import RightBrain
 from core.base_agent import Message, MessageType
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 
 @pytest.fixture
@@ -22,7 +24,7 @@ def config():
     """Test configuration."""
     return {
         "model": {
-            "name": "llama3:8b",
+            "name": "qwen3:14b",
             "temperature": 0.7
         },
         "left_brain": {
@@ -80,14 +82,10 @@ def memory(config):
 @pytest.fixture
 def mock_llm():
     """Mock LLM for testing."""
-    class MockLLM:
-        async def ainvoke(self, prompt):
-            """Return a mock response."""
-            class Response:
-                content = "Mock LLM response based on procedural knowledge"
-            return Response()
+    def _respond(_prompt):
+        return AIMessage(content="Mock LLM response based on procedural knowledge")
 
-    return MockLLM()
+    return RunnableLambda(_respond)
 
 
 @pytest.mark.asyncio
@@ -185,7 +183,7 @@ async def test_left_brain_no_bullets(config, mock_llm):
 async def test_bullet_retrieval_integration():
     """Integration test for bullet retrieval."""
     config = {
-        "model": {"name": "llama3:8b"},
+        "model": {"name": "qwen3:14b"},
         "left_brain": {"k_bullets": 8, "min_bullet_confidence": 0.5},
         "right_brain": {"k_bullets": 12, "min_bullet_confidence": 0.3},
         "procedural_memory": {

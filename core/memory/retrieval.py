@@ -55,7 +55,7 @@ class MemoryRetriever:
                 reverse=True,
             )
 
-        logger.debug(f"🔧 Retrieved {len(bullets)} tool-specific bullets for {tool_name}")
+        logger.debug(f" Retrieved {len(bullets)} tool-specific bullets for {tool_name}")
         return bullets, ids
 
     def retrieve_for_error(
@@ -92,7 +92,7 @@ class MemoryRetriever:
                 reverse=True,
             )
 
-        logger.debug(f"🚨 Retrieved {len(bullets)} error-handling bullets")
+        logger.debug(f" Retrieved {len(bullets)} error-handling bullets")
         return bullets, ids
 
     def retrieve_multi_query(
@@ -157,7 +157,7 @@ class MemoryRetriever:
         top_ids = sorted_ids[:k]
 
         logger.debug(
-            f"🔀 Fused {len(queries)} queries into {len(top_bullets)} bullets "
+            f" Fused {len(queries)} queries into {len(top_bullets)} bullets "
             f"(method={fusion_method})"
         )
 
@@ -199,7 +199,7 @@ class MemoryRetriever:
         selected_ids = ids[:cutoff]
 
         logger.debug(
-            f"📊 Adaptive retrieval: {len(selected)}/{len(bullets)} bullets "
+            f" Adaptive retrieval: {len(selected)}/{len(bullets)} bullets "
             f"(threshold={score_threshold:.2f})"
         )
 
@@ -241,7 +241,7 @@ class MemoryRetriever:
 
         types_str = ", ".join(t.value for t in bullet_types)
         logger.debug(
-            f"📌 Type-filtered retrieval: {len(result)} bullets "
+            f" Type-filtered retrieval: {len(result)} bullets "
             f"(types=[{types_str}])"
         )
 

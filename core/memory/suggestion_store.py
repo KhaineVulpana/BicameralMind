@@ -89,7 +89,13 @@ class SuggestionStore:
     """File-backed store for cross-hemisphere suggestions."""
 
     def __init__(self, path: str):
-        self.path = Path(path)
+        raw_path = path
+        resolved = Path(path)
+        if resolved.exists() and resolved.is_dir():
+            resolved = resolved / "suggestions.jsonl"
+        elif raw_path.endswith(("/", "\\")):
+            resolved = resolved / "suggestions.jsonl"
+        self.path = resolved
         self._items: Dict[str, Suggestion] = {}
         self._load()
 

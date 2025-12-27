@@ -4,7 +4,7 @@ Last Updated: December 24, 2025
 
 ## Completed Phases
 
-### Phase 1: Procedural Memory Foundation ✅
+### Phase 1: Procedural Memory Foundation 
 
 **Status**: Complete
 
@@ -25,7 +25,7 @@ Last Updated: December 24, 2025
 - Three separate collections (left/right/shared)
 - Outcome-based learning (NOT tick-based)
 - Automatic promotion to shared memory
-- Quarantine → Active lifecycle
+- Quarantine -> Active lifecycle
 - No cross-hemisphere contamination
 - Comprehensive playbooks
 
@@ -33,7 +33,7 @@ Last Updated: December 24, 2025
 - [PROCEDURAL_MEMORY_IMPLEMENTATION.md](./PROCEDURAL_MEMORY_IMPLEMENTATION.md)
 - [QUICK_START.md](./QUICK_START.md)
 
-### Phase 2: Learning Pipeline ✅
+### Phase 2: Learning Pipeline 
 
 **Status**: Complete
 
@@ -53,20 +53,20 @@ Last Updated: December 24, 2025
 - Insight extraction with evidence
 - Quality-controlled curation
 - Duplicate detection
-- Complete learning cycle: Execute → Trace → Reflect → Curate → Learn
+- Complete learning cycle: Execute -> Trace -> Reflect -> Curate -> Learn
 - Outcome recording and bullet promotion
 
 **Critical Design Principles**:
-- ✅ Ticks gate reflection DEPTH, NOT scoring
-- ✅ Outcomes update SCORES, NOT ticks
-- ✅ Reflector proposes, Curator decides
-- ✅ Add incrementally, never rewrite
-- ✅ Start QUARANTINED, promote with validation
+-  Ticks gate reflection DEPTH, NOT scoring
+-  Outcomes update SCORES, NOT ticks
+-  Reflector proposes, Curator decides
+-  Add incrementally, never rewrite
+-  Start QUARANTINED, promote with validation
 
 **Documentation**:
 - [PHASE2_LEARNING_PIPELINE.md](./PHASE2_LEARNING_PIPELINE.md)
 
-### Phase 2.5: Automatic Tick Generation ✅
+### Phase 2.5: Automatic Tick Generation 
 
 **Status**: Complete
 
@@ -90,7 +90,7 @@ Last Updated: December 24, 2025
 **Documentation**:
 - [PHASE2_5_TICK_GENERATION.md](./PHASE2_5_TICK_GENERATION.md)
 
-### Phase 3: MCP Integration ✅
+### Phase 3: MCP Integration 
 
 **Status**: Complete
 
@@ -184,35 +184,35 @@ Last Updated: December 24, 2025
 - **Files**: `core/memory/procedural_store.py`
 
 ### Windows Console Unicode
-- **Issue**: Windows console can't encode Unicode characters (✓, →, etc.)
+- **Issue**: Windows console can't encode Unicode characters (OK, ->, etc.)
 - **Fix**: Created simplified test with ASCII-only output
 - **Files**: `tests/test_learning_simple.py`
 
 ## Testing Status
 
 ### Unit Tests
-- ✅ `tests/test_procedural_memory.py` - Basic operations, bullet dataclass, hemisphere separation
-- ✅ `tests/test_learning_simple.py` - Learning cycles, failure learning, tick-gated reflection
-- ✅ `tests/test_tick_generation.py` - Novelty detection and tick generation
-- ✅ `tests/test_mcp_integration.py` - MCP client, tool executor, trace generator, learning integration
-- ✅ `tests/test_phase4_maintenance.py` - Deduplication, pruning, quality analysis, backup/recovery
-- ✅ `tests/test_phase6_cross_hemisphere_learning.py` - Cross-hemisphere learning components
-- ✅ `tests/test_phase6_forced_exploration.py` - Forced exploration policy
+-  `tests/test_procedural_memory.py` - Basic operations, bullet dataclass, hemisphere separation
+-  `tests/test_learning_simple.py` - Learning cycles, failure learning, tick-gated reflection
+-  `tests/test_tick_generation.py` - Novelty detection and tick generation
+-  `tests/test_mcp_integration.py` - MCP client, tool executor, trace generator, learning integration
+-  `tests/test_phase4_maintenance.py` - Deduplication, pruning, quality analysis, backup/recovery
+-  `tests/test_phase6_cross_hemisphere_learning.py` - Cross-hemisphere learning components
+-  `tests/test_phase6_forced_exploration.py` - Forced exploration policy
 
 ### Integration Tests
-- ✅ Basic learning cycle (tick_rate=0.3)
-- ✅ Failure learning (tick_rate=0.9)
-- ✅ Tick-gated reflection depths
-- ✅ MCP tool execution with learning
-- ✅ Automatic trace generation from tools
-- ✅ Tool outcome learning
-- ✅ Insight extraction and curation
-- ✅ Outcome recording
-- ✅ Semantic deduplication
-- ✅ Quality-based bullet merging
-- ✅ Policy-based pruning (aggressive/balanced/conservative)
-- ✅ Backup and recovery operations
-- ✅ Maintenance scheduling
+-  Basic learning cycle (tick_rate=0.3)
+-  Failure learning (tick_rate=0.9)
+-  Tick-gated reflection depths
+-  MCP tool execution with learning
+-  Automatic trace generation from tools
+-  Tool outcome learning
+-  Insight extraction and curation
+-  Outcome recording
+-  Semantic deduplication
+-  Quality-based bullet merging
+-  Policy-based pruning (aggressive/balanced/conservative)
+-  Backup and recovery operations
+-  Maintenance scheduling
 
 ### Test Results
 All tests passing successfully:
@@ -233,7 +233,7 @@ All tests passing successfully:
 - Scheduler automates maintenance tasks
 - Phase 6 cross-hemisphere tests pass (suggestions + forced exploration)
 
-### Phase 4: Deduplication and Pruning ✅
+### Phase 4: Deduplication and Pruning 
 
 **Status**: Complete
 
@@ -353,15 +353,15 @@ procedural_memory:
 ## Dependencies
 
 All dependencies installed and verified:
-- ✅ langchain-core >= 0.1.0
-- ✅ langchain-community >= 0.0.38
-- ✅ langchain-text-splitters
-- ✅ chromadb >= 0.4.22
-- ✅ sentence-transformers >= 2.3.1
-- ✅ ollama >= 0.1.0
-- ✅ pydantic >= 2.0.0
-- ✅ rich >= 13.0.0
-- ✅ All other requirements
+-  langchain-core >= 0.1.0
+-  langchain-community >= 0.0.38
+-  langchain-text-splitters
+-  chromadb >= 0.4.22
+-  sentence-transformers >= 2.3.1
+-  ollama >= 0.13.5
+-  pydantic >= 2.0.0
+-  rich >= 13.0.0
+-  All other requirements
 
 ## Known Issues
 
@@ -417,39 +417,39 @@ None. All critical bugs have been resolved.
 
 ```
 Bicameral Mind System
-├── Left Brain (Pattern Recognition & Replication)
-│   ├── Procedural Memory (left collection)
-│   └── k=8, min_confidence=0.6
-├── Right Brain (Pattern Violation & Mutation)
-│   ├── Procedural Memory (right collection)
-│   └── k=16, min_confidence=0.4
-├── Shared Memory (Promoted knowledge)
-│   └── Consensus bullets (helpful_count >= 3)
-└── Learning Pipeline
-    ├── Execute Task (potentially with MCP tools)
-    ├── Generate Trace
-    ├── Calculate Novelty (automatic ticks)
-    ├── Tick-Gated Reflection (shallow/medium/deep)
-    ├── Extract Insights
-    ├── Curate Bullets (with duplicate detection)
-    ├── Add to Memory (QUARANTINED)
-    ├── Record Outcomes
-    └── Promote to ACTIVE → SHARED
+ Left Brain (Pattern Recognition & Replication)
+    Procedural Memory (left collection)
+    k=8, min_confidence=0.6
+ Right Brain (Pattern Violation & Mutation)
+    Procedural Memory (right collection)
+    k=16, min_confidence=0.4
+ Shared Memory (Promoted knowledge)
+    Consensus bullets (helpful_count >= 3)
+ Learning Pipeline
+     Execute Task (potentially with MCP tools)
+     Generate Trace
+     Calculate Novelty (automatic ticks)
+     Tick-Gated Reflection (shallow/medium/deep)
+     Extract Insights
+     Curate Bullets (with duplicate detection)
+     Add to Memory (QUARANTINED)
+     Record Outcomes
+     Promote to ACTIVE -> SHARED
 ```
 
 ### MCP Integration
 
 ```
 Tool Execution with Learning
-├── Retrieve Relevant Bullets
-├── Execute MCP Tool
-│   ├── Validate Parameters
-│   ├── Call Tool
-│   └── Capture Result
-├── Generate ExecutionTrace
-├── Calculate Novelty (from tool outcome)
-├── Learn via Pipeline (if novelty high)
-└── Update Bullet Scores
+ Retrieve Relevant Bullets
+ Execute MCP Tool
+    Validate Parameters
+    Call Tool
+    Capture Result
+ Generate ExecutionTrace
+ Calculate Novelty (from tool outcome)
+ Learn via Pipeline (if novelty high)
+ Update Bullet Scores
 ```
 
 ## Contact & Contributing
@@ -468,5 +468,5 @@ For questions, see documentation in [docs/](./):
 ---
 
 **Last Updated**: December 24, 2025
-**Status**: Phases 1, 2, 2.5, 3, and 4 Complete ✅
+**Status**: Phases 1, 2, 2.5, 3, and 4 Complete 
 **Next**: Phase 5 - Desktop UI

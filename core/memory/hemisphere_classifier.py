@@ -131,7 +131,7 @@ class HemisphereClassifier:
             )
 
         logger.info(
-            f"  ✓ Classified as {result.hemisphere.value.upper()} "
+            f"  OK Classified as {result.hemisphere.value.upper()} "
             f"(confidence: {result.confidence:.2f})"
         )
 
@@ -160,7 +160,7 @@ class HemisphereClassifier:
             return 0.0
 
         text_lower = bullet_text.lower()
-        score = 0.0
+        scores: List[float] = []
         matches = 0
 
         for pattern in patterns:
@@ -189,23 +189,25 @@ class HemisphereClassifier:
             type_alignment = self._get_type_alignment(bullet_type, pattern)
             pattern_score += type_alignment * 0.1  # 10% weight
 
-            score += pattern_score
+            scores.append(pattern_score)
             matches += 1
 
-        # Normalize by number of patterns
-        return min(1.0, score / max(1, len(patterns)))
+        # Favor best matches over averaging noise from unrelated patterns.
+        scores.sort(reverse=True)
+        top_k = min(3, len(scores))
+        return min(1.0, sum(scores[:top_k]) / max(1, top_k))
 
     def _extract_keywords(self, meta_bullet_text: str) -> List[str]:
         """
         Extract classification keywords from meta-bullet text.
 
         Example:
-        "Does your statement use absolute language? (always, never, must) → LEFT"
+        "Does your statement use absolute language? (always, never, must) -> LEFT"
         Returns: ["always", "never", "must", "absolute", "language"]
         """
         # Remove meta-syntax
         text = meta_bullet_text.lower()
-        text = text.replace("→ left", "").replace("→ right", "")
+        text = text.replace("-> left", "").replace("-> right", "")
         text = text.replace("does your", "").replace("?", "")
 
         # Extract keywords from parentheses
@@ -230,9 +232,9 @@ class HemisphereClassifier:
         Check if bullet type naturally aligns with hemisphere.
 
         Some bullet types tend toward left or right:
-        - CHECKLIST, TOOL_RULE → Left (precise, procedural)
-        - PATTERN, CONCEPT → Right (exploratory, abstract)
-        - HEURISTIC, PITFALL → Either (depends on content)
+        - CHECKLIST, TOOL_RULE -> Left (precise, procedural)
+        - PATTERN, CONCEPT -> Right (exploratory, abstract)
+        - HEURISTIC, PITFALL -> Either (depends on content)
         """
         left_types = {BulletType.CHECKLIST, BulletType.TOOL_RULE}
         right_types = {BulletType.PATTERN, BulletType.CONCEPT}
@@ -268,53 +270,71 @@ class HemisphereClassifier:
         """
         diff = abs(left_score - right_score)
 
-        # Clear winner
-        if diff > 0.3:
-            if left_score > right_score:
-                hemisphere = Hemisphere.LEFT
-                confidence = min(0.95, 0.6 + left_score * 0.4)
-                matched = [p.id for p in left_patterns[:3]]
-                reasoning = f"Strong left pattern match (score: {left_score:.2f} vs {right_score:.2f})"
-                ambiguous = False
-            else:
-                hemisphere = Hemisphere.RIGHT
-                confidence = min(0.95, 0.6 + right_score * 0.4)
-                matched = [p.id for p in right_patterns[:3]]
-                reasoning = f"Strong right pattern match (score: {right_score:.2f} vs {left_score:.2f})"
-                ambiguous = False
+        max_score = max(left_score, right_score)
 
         # Both scores low - no clear pattern
-        elif left_score < 0.4 and right_score < 0.4:
-            # Fallback to source hint
+        if max_score < 0.35:
             hemisphere = source_hint
             confidence = 0.5
             matched = []
             reasoning = f"No clear pattern match - defaulting to source hemisphere ({source_hint.value})"
             ambiguous = True
 
-        # Scores close - ambiguous
-        elif diff < 0.2:
-            # Use source hint as tie-breaker
-            hemisphere = source_hint
-            confidence = 0.6
-            matched = []
-            reasoning = f"Ambiguous classification (scores: L={left_score:.2f}, R={right_score:.2f}) - using source hint"
-            ambiguous = True
-
-        # Modest preference
-        else:
+        # Strong preference
+        elif diff >= 0.2:
             if left_score > right_score:
                 hemisphere = Hemisphere.LEFT
-                confidence = min(0.85, 0.5 + left_score * 0.35)
+                confidence = min(0.95, 0.65 + left_score * 0.35)
+                matched = [p.id for p in left_patterns[:3]]
+                reasoning = f"Strong left pattern match (score: {left_score:.2f} vs {right_score:.2f})"
+                ambiguous = False
+            else:
+                hemisphere = Hemisphere.RIGHT
+                confidence = min(0.95, 0.65 + right_score * 0.35)
+                matched = [p.id for p in right_patterns[:3]]
+                reasoning = f"Strong right pattern match (score: {right_score:.2f} vs {left_score:.2f})"
+                ambiguous = False
+
+        # Moderate preference
+        elif diff >= 0.1:
+            if left_score > right_score:
+                hemisphere = Hemisphere.LEFT
+                confidence = min(0.85, 0.55 + left_score * 0.3)
                 matched = [p.id for p in left_patterns[:2]]
                 reasoning = f"Moderate left preference (score: {left_score:.2f} vs {right_score:.2f})"
                 ambiguous = False
             else:
                 hemisphere = Hemisphere.RIGHT
-                confidence = min(0.85, 0.5 + right_score * 0.35)
+                confidence = min(0.85, 0.55 + right_score * 0.3)
                 matched = [p.id for p in right_patterns[:2]]
                 reasoning = f"Moderate right preference (score: {right_score:.2f} vs {left_score:.2f})"
                 ambiguous = False
+
+        # Slight preference - pick higher score but flag ambiguity
+        elif diff >= 0.05:
+            if left_score > right_score:
+                hemisphere = Hemisphere.LEFT
+                confidence = min(0.75, 0.5 + left_score * 0.25)
+                matched = [p.id for p in left_patterns[:1]]
+                reasoning = f"Slight left preference (score: {left_score:.2f} vs {right_score:.2f})"
+            else:
+                hemisphere = Hemisphere.RIGHT
+                confidence = min(0.75, 0.5 + right_score * 0.25)
+                matched = [p.id for p in right_patterns[:1]]
+                reasoning = f"Slight right preference (score: {right_score:.2f} vs {left_score:.2f})"
+            ambiguous = True
+
+        # Near-tie - keep higher score but mark ambiguous
+        else:
+            if left_score > right_score:
+                hemisphere = Hemisphere.LEFT
+                matched = [p.id for p in left_patterns[:1]]
+            else:
+                hemisphere = Hemisphere.RIGHT
+                matched = [p.id for p in right_patterns[:1]]
+            confidence = 0.55
+            reasoning = f"Near-tie (scores: L={left_score:.2f}, R={right_score:.2f})"
+            ambiguous = True
 
         return ClassificationResult(
             hemisphere=hemisphere,

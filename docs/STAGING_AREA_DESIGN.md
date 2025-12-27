@@ -13,13 +13,13 @@ Currently, bullets are assigned to hemispheres (`side: Hemisphere.LEFT/RIGHT`) i
 
 ### Current 3-State Lifecycle
 ```
-QUARANTINED → ACTIVE → SHARED
+QUARANTINED -> ACTIVE -> SHARED
 ```
 
 ### Proposed 4-State Lifecycle
 ```
-STAGED → QUARANTINED → ACTIVE → SHARED
-       ↓
+STAGED -> QUARANTINED -> ACTIVE -> SHARED
+       
    [Assignment Gate]
 ```
 
@@ -225,7 +225,7 @@ def assign_staged_bullet(
     )
 
     logger.info(
-        f"✓ Assigned {bullet_id[:12]}... from staging to {target_hemisphere.value} "
+        f"OK Assigned {bullet_id[:12]}... from staging to {target_hemisphere.value} "
         f"(reviewer: {reviewer})"
     )
 
@@ -282,7 +282,7 @@ def reject_staged_bullet(
     """
     # Log rejection before deletion
     logger.info(
-        f"✗ Rejected staged bullet {bullet_id[:12]}... "
+        f"X Rejected staged bullet {bullet_id[:12]}... "
         f"(reviewer: {reviewer}, reason: {reason})"
     )
 
@@ -328,7 +328,7 @@ procedural_memory:
 
   # Assignment classifier
   classifier:
-    model: "llama3:8b"              # LLM for classification
+    model: "qwen3:14b"              # LLM for classification
     temperature: 0.3                # Low temp for consistent classification
     prompt_template: "default"      # Or custom prompt path
 ```
@@ -339,44 +339,44 @@ procedural_memory:
 
 **Staged Bullets Table:**
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ Bullet Review Queue                              [50 pending]        │
-├─────────────────────────────────────────────────────────────────────┤
-│ Text                           │ Source │ Suggested │ Confidence │  │
-├────────────────────────────────┼────────┼───────────┼────────────┼──┤
-│ "When API fails, try backoff"  │ Left   │ Left ✓    │ 0.92       │ → │
-│ "Explore edge cases first"     │ Right  │ Right ✓   │ 0.88       │ → │
-│ "Always validate schema"       │ Left   │ Left ✓    │ 0.95       │ → │
-│ "Maybe try analogies?"         │ Left   │ Right ⚠   │ 0.65       │ ⚠ │
-└─────────────────────────────────────────────────────────────────────┘
+
+ Bullet Review Queue                              [50 pending]        
+
+ Text                            Source  Suggested  Confidence   
+
+ "When API fails, try backoff"   Left    Left OK     0.92        -> 
+ "Explore edge cases first"      Right   Right OK    0.88        -> 
+ "Always validate schema"        Left    Left OK     0.95        -> 
+ "Maybe try analogies?"          Left    Right     0.65         
+
 
 [Bulk Assign High-Confidence] [Review Flagged]
 ```
 
 **Bullet Detail Modal (for flagged items):**
 ```
-┌──────────────────────────────────────────────────┐
-│ Review Bullet: staging_abc123                    │
-├──────────────────────────────────────────────────┤
-│ Text:                                            │
-│   "Maybe try analogies when stuck"               │
-│                                                  │
-│ Source: Left brain (executed task)               │
-│ Classification: Right brain (confidence: 0.65)   │
-│                                                  │
-│ Reasoning:                                       │
-│   "Uses exploratory language ('maybe', 'try')    │
-│    suggesting hypothesis generation - typical    │
-│    right hemisphere behavior"                    │
-│                                                  │
-│ Evidence:                                        │
-│   - Trace: trace_xyz                             │
-│   - Outcome: success                             │
-│   - Used by: left brain                          │
-│                                                  │
-│ Actions:                                         │
-│ [Assign to Left] [Assign to Right] [Reject]     │
-└──────────────────────────────────────────────────┘
+
+ Review Bullet: staging_abc123                    
+
+ Text:                                            
+   "Maybe try analogies when stuck"               
+                                                  
+ Source: Left brain (executed task)               
+ Classification: Right brain (confidence: 0.65)   
+                                                  
+ Reasoning:                                       
+   "Uses exploratory language ('maybe', 'try')    
+    suggesting hypothesis generation - typical    
+    right hemisphere behavior"                    
+                                                  
+ Evidence:                                        
+   - Trace: trace_xyz                             
+   - Outcome: success                             
+   - Used by: left brain                          
+                                                  
+ Actions:                                         
+ [Assign to Left] [Assign to Right] [Reject]     
+
 ```
 
 ## Migration Strategy
@@ -410,9 +410,9 @@ procedural_memory:
 ## Backward Compatibility
 
 **For existing bullets:**
-- Already assigned to hemispheres → no change
-- `Bullet.side` already exists → just add STAGING option
-- `add()` method → add `auto_assign` parameter (default `False`)
+- Already assigned to hemispheres -> no change
+- `Bullet.side` already exists -> just add STAGING option
+- `add()` method -> add `auto_assign` parameter (default `False`)
 
 **For new code:**
 - All new bullets go to staging first
@@ -427,7 +427,7 @@ procedural_memory:
 4. Test rejection workflow
 
 ### Integration Tests
-1. End-to-end: Insight → Staging → Assignment → Quarantine
+1. End-to-end: Insight -> Staging -> Assignment -> Quarantine
 2. Auto-classification accuracy on sample bullets
 3. Manual review workflow simulation
 
@@ -458,12 +458,12 @@ ambiguous_examples = [
 
 ## Advantages
 
-✅ **Clean separation**: Staging prevents premature assignment
-✅ **Human oversight**: Optional manual review for quality
-✅ **Cognitive integrity**: Ensures bullets match hemisphere style
-✅ **Auditable**: Track who/what assigned each bullet
-✅ **Flexible**: Auto-assign or manual, configurable
-✅ **Backward compatible**: Existing code continues working
+ **Clean separation**: Staging prevents premature assignment
+ **Human oversight**: Optional manual review for quality
+ **Cognitive integrity**: Ensures bullets match hemisphere style
+ **Auditable**: Track who/what assigned each bullet
+ **Flexible**: Auto-assign or manual, configurable
+ **Backward compatible**: Existing code continues working
 
 ## Next Steps
 

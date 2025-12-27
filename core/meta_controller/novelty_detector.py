@@ -1,8 +1,8 @@
 """Novelty Detection for Consciousness Tick Generation
 
 This module calculates novelty/surprise signals that drive consciousness ticks.
-High novelty → High tick rate → Deeper reflection → More learning
-Low novelty → Low tick rate → Shallow/no reflection → Efficiency
+High novelty -> High tick rate -> Deeper reflection -> More learning
+Low novelty -> Low tick rate -> Shallow/no reflection -> Efficiency
 """
 
 from dataclasses import dataclass
@@ -61,7 +61,7 @@ class NoveltyDetector:
         self.baseline_confidence = 0.7
         self.baseline_success_rate = 0.8
 
-        logger.debug("🔍 NoveltyDetector initialized")
+        logger.debug(" NoveltyDetector initialized")
 
     def measure_novelty(
         self,
@@ -157,7 +157,7 @@ class NoveltyDetector:
         # Log if significant
         if tick_rate > 0.5:
             logger.debug(
-                f"🔍 High novelty detected: tick_rate={tick_rate:.2f} "
+                f" High novelty detected: tick_rate={tick_rate:.2f} "
                 f"({len(measurements)} signals)"
             )
 
@@ -233,7 +233,7 @@ class NoveltyDetector:
         """Reset novelty tracking (useful for testing)."""
         self.novelty_history.clear()
         self.current_novelty = 0.0
-        logger.debug("🔍 NoveltyDetector reset")
+        logger.debug(" NoveltyDetector reset")
 
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about novelty detection."""

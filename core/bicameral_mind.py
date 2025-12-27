@@ -42,7 +42,7 @@ class BicameralMind:
         # Initialize LLM
         model_config = self.config.get("model", {})
         self.llm = Ollama(
-            model=model_config.get("name", "qwen2.5:14b"),
+            model=model_config.get("name", "qwen3:14b"),
             temperature=model_config.get("temperature", 0.7)
         )
 
@@ -86,7 +86,7 @@ class BicameralMind:
         self.running = False
         self.conversation_history = []
         
-        logger.info("🧠 Bicameral Mind initialized")
+        logger.info(" Bicameral Mind initialized")
     
     async def start(self):
         """Start the bicameral mind system"""
@@ -108,7 +108,7 @@ class BicameralMind:
             except Exception as e:
                 logger.warning(f"MCP connect/register failed: {e}")
         
-        logger.success("✨ Bicameral Mind activated")
+        logger.success(" Bicameral Mind activated")
     
     def stop(self):
         """Stop the system"""
@@ -133,7 +133,7 @@ class BicameralMind:
         4. Synthesize response
         """
         
-        logger.info(f"📥 Processing: '{user_input[:50]}...'")
+        logger.info(f" Processing: '{user_input[:50]}...'")
         
         # Get context from RAG if enabled
         rag_context = None

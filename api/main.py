@@ -1,6 +1,7 @@
 """FastAPI backend for BicameralMind UI"""
 import webbrowser
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -37,7 +38,84 @@ except ImportError as e:
     Procedure = None
     Hemisphere = None
 
-app = FastAPI(title="BicameralMind UI")
+async def _startup():
+    """Initialize bicameral mind on startup."""
+    global bicameral_mind
+    global tool_registry, tool_executor, tool_index, procedure_store, episodic_store
+
+    if not BICAMERAL_AVAILABLE:
+        print("[INFO] Running in TEST MODE - UI only, no bicameral mind")
+        bicameral_mind = None
+        if load_config and initialize_tools:
+            config = load_config()
+            tool_registry, tool_executor, tool_index = initialize_tools(config)
+            if ProcedureStore:
+                procedure_store = ProcedureStore(config)
+                procedure_store.load()
+            if EpisodicStore:
+                episodic_store = EpisodicStore(config)
+                episodic_store.load()
+        return
+
+    try:
+        # Load configuration
+        config = load_config()
+
+        # Initialize bicameral mind
+        bicameral_mind = BicameralMind(config)
+        global procedural_memory
+        procedural_memory = getattr(bicameral_mind, "memory", None)
+        tool_registry = getattr(bicameral_mind, "tool_registry", None)
+        tool_executor = getattr(bicameral_mind, "tool_executor", None)
+        tool_index = getattr(bicameral_mind, "tool_index", None)
+        if ProcedureStore:
+            procedure_store = ProcedureStore(config)
+            procedure_store.load()
+        if EpisodicStore:
+            episodic_store = EpisodicStore(config)
+            episodic_store.load()
+
+        if getattr(bicameral_mind, "mcp_client", None) and config.get("mcp", {}).get("enabled", False):
+            try:
+                await bicameral_mind.mcp_client.connect()
+                if tool_registry:
+                    await register_mcp_tools(tool_registry, tool_index, bicameral_mind.mcp_client)
+            except Exception as e:
+                print(f"[WARN] MCP connect/register failed: {e}")
+
+        print("[OK] BicameralMind initialized")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize BicameralMind: {e}")
+        # Create a minimal mock for testing
+        print("[INFO] Running in test mode without full bicameral mind")
+        bicameral_mind = None
+
+
+async def _shutdown():
+    """Cleanup bicameral mind on shutdown."""
+    global bicameral_mind
+    if bicameral_mind:
+        try:
+            bicameral_mind.stop()
+        except Exception as e:
+            print(f"[WARN] Failed to stop BicameralMind: {e}")
+        if getattr(bicameral_mind, "mcp_client", None):
+            try:
+                await bicameral_mind.mcp_client.disconnect()
+            except Exception as e:
+                print(f"[WARN] MCP disconnect failed: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _startup()
+    try:
+        yield
+    finally:
+        await _shutdown()
+
+
+app = FastAPI(title="BicameralMind UI", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -134,60 +212,6 @@ class ProcedureRequest(BaseModel):
 
 class EpisodeRequest(BaseModel):
     data: dict
-
-
-@app.on_event("startup")
-async def startup():
-    """Initialize bicameral mind on startup"""
-    global bicameral_mind
-    global tool_registry, tool_executor, tool_index, procedure_store, episodic_store
-
-    if not BICAMERAL_AVAILABLE:
-        print("[INFO] Running in TEST MODE - UI only, no bicameral mind")
-        bicameral_mind = None
-        if load_config and initialize_tools:
-            config = load_config()
-            tool_registry, tool_executor, tool_index = initialize_tools(config)
-            if ProcedureStore:
-                procedure_store = ProcedureStore(config)
-                procedure_store.load()
-            if EpisodicStore:
-                episodic_store = EpisodicStore(config)
-                episodic_store.load()
-        return
-
-    try:
-        # Load configuration
-        config = load_config()
-
-        # Initialize bicameral mind
-        bicameral_mind = BicameralMind(config)
-        global procedural_memory
-        procedural_memory = getattr(bicameral_mind, "memory", None)
-        tool_registry = getattr(bicameral_mind, "tool_registry", None)
-        tool_executor = getattr(bicameral_mind, "tool_executor", None)
-        tool_index = getattr(bicameral_mind, "tool_index", None)
-        if ProcedureStore:
-            procedure_store = ProcedureStore(config)
-            procedure_store.load()
-        if EpisodicStore:
-            episodic_store = EpisodicStore(config)
-            episodic_store.load()
-
-        if getattr(bicameral_mind, "mcp_client", None) and config.get("mcp", {}).get("enabled", False):
-            try:
-                await bicameral_mind.mcp_client.connect()
-                if tool_registry:
-                    await register_mcp_tools(tool_registry, tool_index, bicameral_mind.mcp_client)
-            except Exception as e:
-                print(f"[WARN] MCP connect/register failed: {e}")
-
-        print("[OK] BicameralMind initialized")
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize BicameralMind: {e}")
-        # Create a minimal mock for testing
-        print("[INFO] Running in test mode without full bicameral mind")
-        bicameral_mind = None
 
 
 @app.get("/")

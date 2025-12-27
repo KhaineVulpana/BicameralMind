@@ -38,56 +38,56 @@ def format_bullets_for_prompt(bullets: List[Bullet]) -> str:
     if BulletType.TOOL_RULE in by_type:
         section = "TOOL RULES (API/Tool Usage):\n"
         for bullet in by_type[BulletType.TOOL_RULE]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Heuristics (general strategies)
     if BulletType.HEURISTIC in by_type:
         section = "BEST PRACTICES:\n"
         for bullet in by_type[BulletType.HEURISTIC]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Checklists (step-by-step)
     if BulletType.CHECKLIST in by_type:
         section = "PROCEDURES:\n"
         for bullet in by_type[BulletType.CHECKLIST]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Pitfalls (what to avoid)
     if BulletType.PITFALL in by_type:
         section = "COMMON PITFALLS (Avoid These):\n"
         for bullet in by_type[BulletType.PITFALL]:
-            section += f"  ⚠ {bullet.text}\n"
+            section += f"   {bullet.text}\n"
         sections.append(section)
 
     # Patterns (recognized patterns)
     if BulletType.PATTERN in by_type:
         section = "KNOWN PATTERNS:\n"
         for bullet in by_type[BulletType.PATTERN]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Examples
     if BulletType.EXAMPLE in by_type:
         section = "EXAMPLES:\n"
         for bullet in by_type[BulletType.EXAMPLE]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Templates
     if BulletType.TEMPLATE in by_type:
         section = "TEMPLATES:\n"
         for bullet in by_type[BulletType.TEMPLATE]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Concepts
     if BulletType.CONCEPT in by_type:
         section = "KEY CONCEPTS:\n"
         for bullet in by_type[BulletType.CONCEPT]:
-            section += f"  • {bullet.text}\n"
+            section += f"  - {bullet.text}\n"
         sections.append(section)
 
     # Questions (to ask in certain contexts)
@@ -150,7 +150,7 @@ def format_bullets_with_metadata(bullets: List[Bullet]) -> str:
         score = bullet.score()
         conf = bullet.confidence
         lines.append(
-            f"• {bullet.text}\n"
+            f"- {bullet.text}\n"
             f"  [Type: {bullet.type.value}, Score: {score:.2f}, "
             f"Confidence: {conf:.2f}, "
             f"Helpful: {bullet.helpful_count}, Harmful: {bullet.harmful_count}]"
@@ -162,17 +162,17 @@ def format_bullets_with_metadata(bullets: List[Bullet]) -> str:
 def _get_type_marker(bullet_type: BulletType) -> str:
     """Get emoji/marker for bullet type."""
     markers = {
-        BulletType.TOOL_RULE: "🔧",
-        BulletType.HEURISTIC: "💡",
-        BulletType.CHECKLIST: "✓",
-        BulletType.PITFALL: "⚠️",
-        BulletType.PATTERN: "🔍",
-        BulletType.EXAMPLE: "📝",
-        BulletType.TEMPLATE: "📋",
-        BulletType.CONCEPT: "🎯",
-        BulletType.QUESTION: "❓",
+        BulletType.TOOL_RULE: "",
+        BulletType.HEURISTIC: "",
+        BulletType.CHECKLIST: "OK",
+        BulletType.PITFALL: "",
+        BulletType.PATTERN: "",
+        BulletType.EXAMPLE: "",
+        BulletType.TEMPLATE: "",
+        BulletType.CONCEPT: "",
+        BulletType.QUESTION: "",
     }
-    return markers.get(bullet_type, "•")
+    return markers.get(bullet_type, "-")
 
 
 def extract_bullet_ids(bullets: List[Bullet]) -> List[str]:

@@ -27,10 +27,10 @@
 
 ### What This System Is NOT
 
-- ❌ A standard chatbot or conversational AI
-- ❌ A simple RAG (Retrieval-Augmented Generation) system
-- ❌ A reinforcement learning or fine-tuning framework
-- ❌ Cloud-dependent or requiring API calls
+-  A standard chatbot or conversational AI
+-  A simple RAG (Retrieval-Augmented Generation) system
+-  A reinforcement learning or fine-tuning framework
+-  Cloud-dependent or requiring API calls
 
 ---
 
@@ -110,10 +110,10 @@ Ticks represent discrete reevaluation moments - the system's equivalent of "wait
 
 **What Ticks Are NOT:**
 
-- ❌ **NOT emotions or feelings** - No anthropomorphization, no simulated consciousness
-- ❌ **NOT direct learning signals** - They don't score bullets as helpful/harmful
-- ❌ **NOT rewards** - This is not reinforcement learning
-- ❌ **NOT always active** - Low tick rates mean the system is in "flow state"
+-  **NOT emotions or feelings** - No anthropomorphization, no simulated consciousness
+-  **NOT direct learning signals** - They don't score bullets as helpful/harmful
+-  **NOT rewards** - This is not reinforcement learning
+-  **NOT always active** - Low tick rates mean the system is in "flow state"
 
 **The Consciousness Rate Concept:**
 
@@ -142,24 +142,24 @@ The system can exhibit different cognitive states based on tick frequency AND wh
 - **What's happening:** High novelty signal, unbounded search
 - **Action needed:** Anchor with constraints (bring in Left)
 
-**High ticks + oscillation (Left ↔ Right):**
+**High ticks + oscillation (Left <-> Right):**
 - **Meaning:** Active learning in progress
 - **Analog:** Insight formation, hypothesis testing
-- **What's happening:** Exploration ↔ validation cycle
+- **What's happening:** Exploration <-> validation cycle
 - **Expected outcome:** New bullet creation, then convergence
 
 **The Critical Rule - Ticks Are Gates, Not Scores:**
 
 ```
 WRONG: Every tick = +1 helpful or harmful
-       ↓
+       
      This would make "time spent thinking" = "truth"
      Loops would self-reinforce
      The system could "learn" just by ticking
 
 CORRECT: Ticks decide IF/HOW DEEPLY to reflect
          Outcomes decide WHAT to learn
-         ↓
+         
        Ticks are necessary but NOT sufficient for learning
 ```
 
@@ -211,13 +211,13 @@ Right Hemisphere (Pattern Violation):
   Generates 5-10 possibilities
   Asks open questions
   Proposes alternative framings
-        ↓
+        
 Left Hemisphere (Pattern Continuity):
   Tests each for feasibility
   Checks against constraints
   Validates logic and schemas
   Eliminates invalid options
-        ↓
+        
 Meta-Controller (Consciousness Tick):
   Evaluates cognitive state:
     - Are we stuck? (sustained high ticks on one side)
@@ -227,7 +227,7 @@ Meta-Controller (Consciousness Tick):
     - Continue current hemisphere?
     - Switch to other hemisphere?
     - Increase/decrease reflection depth?
-        ↓
+        
 Repeat until convergence
 ```
 
@@ -324,8 +324,8 @@ Each hemisphere:
 Every procedural memory bullet follows a strict lifecycle:
 
 ```
-NEW → QUARANTINED → ACTIVE → SHARED (promotion)
-                           → DEPRECATED (if harmful)
+NEW -> QUARANTINED -> ACTIVE -> SHARED (promotion)
+                           -> DEPRECATED (if harmful)
 ```
 
 **Quarantine Rules:**
@@ -347,131 +347,131 @@ NEW → QUARANTINED → ACTIVE → SHARED (promotion)
 ### System Layers
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        User Interface                        │
-│                   (Desktop UI / CLI / API)                   │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────────────────────────────────────┐
-│                     Meta-Controller                          │
-│  • Consciousness tick generator                             │
-│  • Hemisphere selection (left/right/both)                   │
-│  • Exploration policy (exploit/explore/integrate)           │
-│  • Novelty detection & conflict resolution                  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                ┌─────────────┴─────────────┐
-                │                           │
-┌───────────────────────────┐   ┌───────────────────────────┐
-│     Left Hemisphere       │   │    Right Hemisphere       │
-│  (Pattern Continuity)     │   │  (Pattern Violation)      │
-│                           │   │                           │
-│  • Logic & validation     │   │  • Creativity & novelty   │
-│  • Tool correctness       │   │  • Hypothesis generation  │
-│  • Checklists & schemas   │   │  • Reframing & questions  │
-│  • Risk aversion          │   │  • Exploration            │
-└───────────────────────────┘   └───────────────────────────┘
-         │                               │
-         └───────────┬───────────────────┘
-                     │
-┌─────────────────────────────────────────────────────────────┐
-│                  Learning Pipeline                           │
-│  1. Execute → 2. Trace → 3. Reflect → 4. Curate → 5. Learn  │
-│                                                               │
-│  • Reflector (tick-gated depth: shallow/medium/deep)        │
-│  • Curator (insight extraction, quality control)            │
-│  • Deduplicator (semantic similarity, quality merging)      │
-│  • Pruner (policy-based: aggressive/balanced/conservative)  │
-└─────────────────────────────────────────────────────────────┘
-                     │
-┌─────────────────────────────────────────────────────────────┐
-│                  Procedural Memory                           │
-│                                                               │
-│  ┌──────────────────┐  ┌──────────────────┐                 │
-│  │ procedural_left  │  │ procedural_right │                 │
-│  │                  │  │                  │                 │
-│  │ k=8, conf=0.6   │  │ k=16, conf=0.4  │                 │
-│  │ precision-first  │  │ diversity-first  │                 │
-│  └──────────────────┘  └──────────────────┘                 │
-│                                                               │
-│  ┌─────────────────────────────────────────┐                │
-│  │        procedural_shared                 │                │
-│  │  (Consensus knowledge, helpful_count≥3)  │                │
-│  └─────────────────────────────────────────┘                │
-│                                                               │
-│  Technology: ChromaDB + Sentence Transformers               │
-│  Embeddings: all-MiniLM-L6-v2 (CPU-friendly)               │
-└─────────────────────────────────────────────────────────────┘
-                     │
-┌─────────────────────────────────────────────────────────────┐
-│                External Integrations                         │
-│                                                               │
-│  • Model Context Protocol (MCP) - Tool execution            │
-│  • Knowledge RAG - Factual retrieval (separate from memory) │
-│  • Local LLM - Inference via Ollama                         │
-└─────────────────────────────────────────────────────────────┘
+
+                        User Interface                        
+                   (Desktop UI / CLI / API)                   
+
+                              
+
+                     Meta-Controller                          
+  - Consciousness tick generator                             
+  - Hemisphere selection (left/right/both)                   
+  - Exploration policy (exploit/explore/integrate)           
+  - Novelty detection & conflict resolution                  
+
+                              
+                
+                                           
+   
+     Left Hemisphere              Right Hemisphere       
+  (Pattern Continuity)          (Pattern Violation)      
+                                                         
+  - Logic & validation          - Creativity & novelty   
+  - Tool correctness            - Hypothesis generation  
+  - Checklists & schemas        - Reframing & questions  
+  - Risk aversion               - Exploration            
+   
+                                        
+         
+                     
+
+                  Learning Pipeline                           
+  1. Execute -> 2. Trace -> 3. Reflect -> 4. Curate -> 5. Learn  
+                                                               
+  - Reflector (tick-gated depth: shallow/medium/deep)        
+  - Curator (insight extraction, quality control)            
+  - Deduplicator (semantic similarity, quality merging)      
+  - Pruner (policy-based: aggressive/balanced/conservative)  
+
+                     
+
+                  Procedural Memory                           
+                                                               
+                     
+   procedural_left     procedural_right                  
+                                                         
+   k=8, conf=0.6      k=16, conf=0.4                   
+   precision-first     diversity-first                   
+                     
+                                                               
+                  
+          procedural_shared                                 
+    (Consensus knowledge, helpful_count3)                  
+                  
+                                                               
+  Technology: ChromaDB + Sentence Transformers               
+  Embeddings: all-MiniLM-L6-v2 (CPU-friendly)               
+
+                     
+
+                External Integrations                         
+                                                               
+  - Model Context Protocol (MCP) - Tool execution            
+  - Knowledge RAG - Factual retrieval (separate from memory) 
+  - Local LLM - Inference via Ollama                         
+
 ```
 
 ### Data Flow: Single Task Execution
 
 ```
 User Query
-    ↓
+    
 Meta-Controller Tick
-    ├─ Calculate novelty from context
-    ├─ Decide hemisphere lead (left/right/both)
-    └─ Set reflection depth threshold
-    ↓
+     Calculate novelty from context
+     Decide hemisphere lead (left/right/both)
+     Set reflection depth threshold
+    
 Hemisphere Agent (e.g., Left)
-    ├─ Retrieve procedural bullets (from procedural_left + shared)
-    ├─ Retrieve knowledge facts (from RAG, if needed)
-    ├─ Assemble prompt with:
-    │   • System role ("You are Left Brain...")
-    │   • Facts from RAG
-    │   • Procedural strategies from bullets
-    │   • Common failure modes
-    ├─ Execute plan (potentially calling MCP tools)
-    └─ Log which bullet IDs were used
-    ↓
+     Retrieve procedural bullets (from procedural_left + shared)
+     Retrieve knowledge facts (from RAG, if needed)
+     Assemble prompt with:
+       - System role ("You are Left Brain...")
+       - Facts from RAG
+       - Procedural strategies from bullets
+       - Common failure modes
+     Execute plan (potentially calling MCP tools)
+     Log which bullet IDs were used
+    
 Tool Execution (if applicable)
-    ├─ Validate parameters using bullet rules
-    ├─ Call MCP tool
-    ├─ Capture success/failure + trace
-    └─ Generate ExecutionTrace object
-    ↓
+     Validate parameters using bullet rules
+     Call MCP tool
+     Capture success/failure + trace
+     Generate ExecutionTrace object
+    
 Novelty Calculation
-    ├─ Compare expected vs actual outcomes
-    ├─ Measure: entropy, conflict, surprise, tool failures
-    └─ Emit tick_rate (0.0 = routine, 1.0 = high novelty)
-    ↓
+     Compare expected vs actual outcomes
+     Measure: entropy, conflict, surprise, tool failures
+     Emit tick_rate (0.0 = routine, 1.0 = high novelty)
+    
 Learning Pipeline (if tick_rate > threshold)
-    ↓
+    
 1. Reflector (tick-gated depth)
-    ├─ Shallow (tick < 0.5): "Did this work?"
-    ├─ Medium (0.5 ≤ tick < 0.8): "What helped/harmed?"
-    └─ Deep (tick ≥ 0.8): "Why? What's missing?"
-    ↓
+     Shallow (tick < 0.5): "Did this work?"
+     Medium (0.5  tick < 0.8): "What helped/harmed?"
+     Deep (tick  0.8): "Why? What's missing?"
+    
 2. Extract Insights
-    ├─ Parse reflection output
-    ├─ Tag with evidence and confidence
-    └─ Produce candidate bullets
-    ↓
+     Parse reflection output
+     Tag with evidence and confidence
+     Produce candidate bullets
+    
 3. Curator
-    ├─ Quality control (min_confidence filter)
-    ├─ Duplicate detection (semantic similarity)
-    ├─ Decide: add new bullet or update existing
-    └─ All new bullets start QUARANTINED
-    ↓
+     Quality control (min_confidence filter)
+     Duplicate detection (semantic similarity)
+     Decide: add new bullet or update existing
+     All new bullets start QUARANTINED
+    
 4. Outcome Scoring
-    ├─ If success: helpful_count += 1 for top relevant bullets
-    ├─ If failure: harmful_count += 1 for implicated bullets
-    └─ Promotion check: helpful≥3, harmful=0 → ACTIVE
-    ↓
+     If success: helpful_count += 1 for top relevant bullets
+     If failure: harmful_count += 1 for implicated bullets
+     Promotion check: helpful3, harmful=0 -> ACTIVE
+    
 5. Shared Promotion (if eligible)
-    ├─ Check cross-validation criteria
-    ├─ Optionally translate for other hemisphere
-    └─ Copy to procedural_shared
-    ↓
+     Check cross-validation criteria
+     Optionally translate for other hemisphere
+     Copy to procedural_shared
+    
 Final Answer to User
 ```
 
@@ -508,53 +508,53 @@ tick_rate = smooth(novelty_score)  # Moving average to prevent oscillation
 The tick rate determines NOT whether learning happens, but HOW DEEPLY the system reflects:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Tick Rate: 0.0 - 0.5 (Low to Medium)                        │
-│ Reflection: SHALLOW or NONE                                  │
-│                                                               │
-│ Questions Asked:                                              │
-│   • "Did this work?" (yes/no)                                │
-│   • "Was the outcome expected?" (yes/no)                     │
-│                                                               │
-│ Action:                                                       │
-│   • Simple outcome recording (helpful/harmful)               │
-│   • No new bullets created                                   │
-│   • Existing bullets scored only                             │
-└─────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────┐
-│ Tick Rate: 0.5 - 0.8 (Medium to High)                       │
-│ Reflection: MEDIUM                                           │
-│                                                               │
-│ Questions Asked:                                              │
-│   • "What specifically helped or harmed?"                    │
-│   • "Which bullets were most relevant?"                      │
-│   • "Was there a pattern to the failure/success?"           │
-│                                                               │
-│ Action:                                                       │
-│   • Detailed trace analysis                                  │
-│   • Bullet causality assessment                              │
-│   • Potential bullet updates                                 │
-│   • May quarantine new bullet if gap detected                │
-└─────────────────────────────────────────────────────────────┘
+ Tick Rate: 0.0 - 0.5 (Low to Medium)                        
+ Reflection: SHALLOW or NONE                                  
+                                                               
+ Questions Asked:                                              
+   - "Did this work?" (yes/no)                                
+   - "Was the outcome expected?" (yes/no)                     
+                                                               
+ Action:                                                       
+   - Simple outcome recording (helpful/harmful)               
+   - No new bullets created                                   
+   - Existing bullets scored only                             
 
-┌─────────────────────────────────────────────────────────────┐
-│ Tick Rate: 0.8 - 1.0 (High to Extreme)                      │
-│ Reflection: DEEP (involves LLM reasoning)                    │
-│                                                               │
-│ Questions Asked:                                              │
-│   • "WHY did this fail/succeed?"                             │
-│   • "What's the underlying pattern we're missing?"           │
-│   • "What assumptions were wrong?"                           │
-│   • "What tool/strategy should we try instead?"              │
-│                                                               │
-│ Action:                                                       │
-│   • Full LLM-powered reflection                              │
-│   • Causal analysis across multiple traces                   │
-│   • New bullet creation (quarantined)                        │
-│   • May force hemisphere switch                              │
-│   • May promote/deprecate existing bullets                   │
-└─────────────────────────────────────────────────────────────┘
+
+
+ Tick Rate: 0.5 - 0.8 (Medium to High)                       
+ Reflection: MEDIUM                                           
+                                                               
+ Questions Asked:                                              
+   - "What specifically helped or harmed?"                    
+   - "Which bullets were most relevant?"                      
+   - "Was there a pattern to the failure/success?"           
+                                                               
+ Action:                                                       
+   - Detailed trace analysis                                  
+   - Bullet causality assessment                              
+   - Potential bullet updates                                 
+   - May quarantine new bullet if gap detected                
+
+
+
+ Tick Rate: 0.8 - 1.0 (High to Extreme)                      
+ Reflection: DEEP (involves LLM reasoning)                    
+                                                               
+ Questions Asked:                                              
+   - "WHY did this fail/succeed?"                             
+   - "What's the underlying pattern we're missing?"           
+   - "What assumptions were wrong?"                           
+   - "What tool/strategy should we try instead?"              
+                                                               
+ Action:                                                       
+   - Full LLM-powered reflection                              
+   - Causal analysis across multiple traces                   
+   - New bullet creation (quarantined)                        
+   - May force hemisphere switch                              
+   - May promote/deprecate existing bullets                   
+
 ```
 
 **The Critical Insight:**
@@ -566,9 +566,9 @@ Ticks measure **cognitive pressure**, not truth:
 - Sustained high ticks = "My current knowledge is insufficient"
 
 **What This Prevents:**
-- ❌ Time spent thinking ≠ correctness
-- ❌ Loops can't self-reinforce just by running
-- ❌ Noise doesn't accumulate from routine operations
+-  Time spent thinking = correctness
+-  Loops can't self-reinforce just by running
+-  Noise doesn't accumulate from routine operations
 
 ### 2. Hemispheres Have Different Retrieval Strategies
 
@@ -608,7 +608,7 @@ retrieval_config = {
 2. **Start quarantined** - All new knowledge must prove itself
 3. **Outcome-based scoring** - Ticks gate reflection, outcomes update scores
 4. **Periodic dedupe/prune** - Remove redundancy without losing quality
-5. **Explicit lifecycle** - Quarantined → Active → Shared → Deprecated
+5. **Explicit lifecycle** - Quarantined -> Active -> Shared -> Deprecated
 
 ### 4. Cross-Hemisphere Learning (Conservative Mode)
 
@@ -621,17 +621,17 @@ retrieval_config = {
 **Promotion Flow:**
 ```
 Left Bullet (helpful_count=3, harmful=0)
-    ↓
+    
 Eligible for Shared
-    ↓
+    
 Cross-Validation Check (optional):
     "Has Right hemisphere used this successfully?"
-    ↓
+    
 Translation (if needed):
-    Convert "strict rule" → "creative constraint"
-    ↓
+    Convert "strict rule" -> "creative constraint"
+    
 Copy to procedural_shared
-    ↓
+    
 Now available to both hemispheres
 ```
 
@@ -780,7 +780,7 @@ quality_scores = {
 
 **Recommended Models:**
 - **Llama 3.1 8B** (quantized to 4-bit: ~6GB VRAM)
-- **Qwen 2.5 14B** (quantized to 4-bit: ~9GB VRAM)
+- **Qwen 3:14B** (quantized to 4-bit: ~9GB VRAM)
 - **Gemma 3 12B int4** (~7GB VRAM)
 
 ### Installation
@@ -801,7 +801,7 @@ pip install -r requirements.txt
 - `langchain-community >= 0.0.38`
 - `chromadb >= 0.4.22`
 - `sentence-transformers >= 2.3.1`
-- `ollama >= 0.1.0`
+- `ollama >= 0.13.5`
 - `pydantic >= 2.0.0`
 
 3. **Setup local LLM (via Ollama):**
@@ -957,7 +957,7 @@ print(f"Bullets will become active after 3 successful uses")
 
 ## Phase Completion Status
 
-### ✅ Phase 1: Procedural Memory Foundation
+###  Phase 1: Procedural Memory Foundation
 **Status**: Complete
 
 **Implemented:**
@@ -965,10 +965,10 @@ print(f"Bullets will become active after 3 successful uses")
 - Three separate collections (left/right/shared)
 - Outcome-based learning (NOT tick-based)
 - Automatic promotion to shared memory
-- Quarantine → Active lifecycle
+- Quarantine -> Active lifecycle
 - No cross-hemisphere contamination
 
-### ✅ Phase 2: Learning Pipeline
+###  Phase 2: Learning Pipeline
 **Status**: Complete
 
 **Implemented:**
@@ -980,13 +980,13 @@ print(f"Bullets will become active after 3 successful uses")
 - Complete learning cycle
 
 **Critical Principles:**
-- ✅ Ticks gate reflection DEPTH, NOT scoring
-- ✅ Outcomes update SCORES, NOT ticks
-- ✅ Reflector proposes, Curator decides
-- ✅ Add incrementally, never rewrite
-- ✅ Start QUARANTINED, promote with validation
+-  Ticks gate reflection DEPTH, NOT scoring
+-  Outcomes update SCORES, NOT ticks
+-  Reflector proposes, Curator decides
+-  Add incrementally, never rewrite
+-  Start QUARANTINED, promote with validation
 
-### ✅ Phase 2.5: Automatic Tick Generation
+###  Phase 2.5: Automatic Tick Generation
 **Status**: Complete
 
 **Implemented:**
@@ -996,7 +996,7 @@ print(f"Bullets will become active after 3 successful uses")
 - Evidence-based novelty measurements
 - Five novelty signal types
 
-### ✅ Phase 3: MCP Integration
+###  Phase 3: MCP Integration
 **Status**: Complete
 
 **Implemented:**
@@ -1008,7 +1008,7 @@ print(f"Bullets will become active after 3 successful uses")
 - Integration with learning pipeline
 - Real-time learning from tool usage
 
-### ✅ Phase 4: Deduplication & Pruning
+###  Phase 4: Deduplication & Pruning
 **Status**: Complete
 
 **Implemented:**
@@ -1019,7 +1019,7 @@ print(f"Bullets will become active after 3 successful uses")
 - Scheduled maintenance (daily dedupe, weekly prune)
 - Comprehensive audit trail
 
-### ✅ Phase 6: Cross-Hemisphere Learning
+###  Phase 6: Cross-Hemisphere Learning
 **Status**: Core implementation complete
 
 **Implemented:**
@@ -1030,7 +1030,7 @@ print(f"Bullets will become active after 3 successful uses")
 - Diversity metrics and convergence throttling
 - Forced exploration policy
 
-### 🔄 Phase 5: Desktop UI
+###  Phase 5: Desktop UI
 **Status**: In Progress
 
 **Planned:**
@@ -1063,8 +1063,8 @@ procedural_memory:
   embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
   
   # Phase 1: Basic Settings
-  promote_threshold: 3        # helpful_count needed for Active → Shared
-  quarantine_threshold: 2     # helpful_count needed for Quarantined → Active
+  promote_threshold: 3        # helpful_count needed for Active -> Shared
+  quarantine_threshold: 2     # helpful_count needed for Quarantined -> Active
   
   # Phase 2: Learning Pipeline
   learning:
@@ -1212,19 +1212,19 @@ Designed for consumer hardware. Cloud integrations (if added) are opt-in, not re
 ### Test Coverage
 
 **Unit Tests:**
-- ✅ Procedural memory CRUD operations
-- ✅ Bullet lifecycle (quarantine → active → shared)
-- ✅ Hemisphere separation (no cross-contamination)
-- ✅ Novelty detection and tick generation
-- ✅ MCP tool execution and tracing
-- ✅ Deduplication and pruning logic
+-  Procedural memory CRUD operations
+-  Bullet lifecycle (quarantine -> active -> shared)
+-  Hemisphere separation (no cross-contamination)
+-  Novelty detection and tick generation
+-  MCP tool execution and tracing
+-  Deduplication and pruning logic
 
 **Integration Tests:**
-- ✅ Complete learning cycle (execute → reflect → curate)
-- ✅ Tick-gated reflection depths
-- ✅ Tool outcome learning
-- ✅ Cross-hemisphere promotion
-- ✅ Maintenance scheduling
+-  Complete learning cycle (execute -> reflect -> curate)
+-  Tick-gated reflection depths
+-  Tool outcome learning
+-  Cross-hemisphere promotion
+-  Maintenance scheduling
 
 ### Running Tests
 
@@ -1247,70 +1247,70 @@ python tests/test_phase4_maintenance.py
 ### Learning Cycle
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                     Execute Task                              │
-│  • Retrieve procedural bullets (hemisphere + shared)          │
-│  • Retrieve knowledge facts (RAG)                             │
-│  • Assemble prompt with strategies & failure modes            │
-│  • Execute plan (potentially calling MCP tools)               │
-│  • Log bullet IDs used                                        │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                   Generate Trace                              │
-│  • Capture tool calls, results, errors                        │
-│  • Record expected vs actual outcomes                         │
-│  • Link to bullets used                                       │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                Calculate Novelty                              │
-│  • Entropy delta (expected vs actual)                         │
-│  • Conflict signal (hemisphere disagreement)                  │
-│  • Tool failure rate                                          │
-│  • Retrieval uncertainty                                      │
-│  • User correction flag                                       │
-│  → Emit tick_rate (0.0 - 1.0)                                │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│              Tick-Gated Reflection                            │
-│  if tick_rate >= threshold:                                   │
-│    • Shallow (tick < 0.5): "Did this work?"                   │
-│    • Medium (0.5 ≤ tick < 0.8): "What helped/harmed?"         │
-│    • Deep (tick ≥ 0.8): "Why? What's missing?"                │
-│  else:                                                        │
-│    • Skip reflection, proceed to scoring                      │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                 Extract Insights                              │
-│  • Parse reflection output                                    │
-│  • Tag with evidence and confidence                           │
-│  • Produce candidate bullets                                  │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                     Curate                                    │
-│  • Quality control (min_confidence filter)                    │
-│  • Duplicate detection (semantic similarity)                  │
-│  • Decide: add new bullet or update existing                  │
-│  • All new bullets start QUARANTINED                          │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│                Outcome Scoring                                │
-│  • Success: helpful_count += 1 for top bullets                │
-│  • Failure: harmful_count += 1 for implicated bullets         │
-│  • Check promotion: helpful≥3, harmful=0 → ACTIVE             │
-└──────────────────────────────────────────────────────────────┘
-                              ↓
-┌──────────────────────────────────────────────────────────────┐
-│            Shared Promotion (if eligible)                     │
-│  • Verify cross-validation criteria                           │
-│  • Optionally translate for other hemisphere                  │
-│  • Copy to procedural_shared                                  │
-└──────────────────────────────────────────────────────────────┘
+
+                     Execute Task                              
+  - Retrieve procedural bullets (hemisphere + shared)          
+  - Retrieve knowledge facts (RAG)                             
+  - Assemble prompt with strategies & failure modes            
+  - Execute plan (potentially calling MCP tools)               
+  - Log bullet IDs used                                        
+
+                              
+
+                   Generate Trace                              
+  - Capture tool calls, results, errors                        
+  - Record expected vs actual outcomes                         
+  - Link to bullets used                                       
+
+                              
+
+                Calculate Novelty                              
+  - Entropy delta (expected vs actual)                         
+  - Conflict signal (hemisphere disagreement)                  
+  - Tool failure rate                                          
+  - Retrieval uncertainty                                      
+  - User correction flag                                       
+  -> Emit tick_rate (0.0 - 1.0)                                
+
+                              
+
+              Tick-Gated Reflection                            
+  if tick_rate >= threshold:                                   
+    - Shallow (tick < 0.5): "Did this work?"                   
+    - Medium (0.5  tick < 0.8): "What helped/harmed?"         
+    - Deep (tick  0.8): "Why? What's missing?"                
+  else:                                                        
+    - Skip reflection, proceed to scoring                      
+
+                              
+
+                 Extract Insights                              
+  - Parse reflection output                                    
+  - Tag with evidence and confidence                           
+  - Produce candidate bullets                                  
+
+                              
+
+                     Curate                                    
+  - Quality control (min_confidence filter)                    
+  - Duplicate detection (semantic similarity)                  
+  - Decide: add new bullet or update existing                  
+  - All new bullets start QUARANTINED                          
+
+                              
+
+                Outcome Scoring                                
+  - Success: helpful_count += 1 for top bullets                
+  - Failure: harmful_count += 1 for implicated bullets         
+  - Check promotion: helpful3, harmful=0 -> ACTIVE             
+
+                              
+
+            Shared Promotion (if eligible)                     
+  - Verify cross-validation criteria                           
+  - Optionally translate for other hemisphere                  
+  - Copy to procedural_shared                                  
+
 ```
 
 ---
@@ -1431,7 +1431,7 @@ This project follows ACE principles:
 **When modifying memory:**
 - Never rewrite existing bullets in bulk
 - Always use delta updates
-- Respect quarantine → active → shared flow
+- Respect quarantine -> active -> shared flow
 - Log all destructive operations
 
 ---

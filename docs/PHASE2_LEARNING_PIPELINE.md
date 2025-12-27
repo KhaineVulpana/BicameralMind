@@ -1,10 +1,10 @@
-# Phase 2: Learning Pipeline - Implementation Complete ✅
+# Phase 2: Learning Pipeline - Implementation Complete 
 
 ## Overview
 
 **Phase 2** implements the complete learning cycle for the Bicameral Mind system, enabling automated extraction of insights from execution traces and their conversion into procedural bullets.
 
-This builds on Phase 1's procedural memory foundation with the **Reflection → Curation → Learning** pipeline.
+This builds on Phase 1's procedural memory foundation with the **Reflection -> Curation -> Learning** pipeline.
 
 ## What Was Built
 
@@ -39,28 +39,28 @@ The Reflector analyzes execution traces to extract actionable insights.
 The Curator converts insights into bullets and manages memory quality.
 
 **Key Features:**
-- **Insight → Bullet conversion**: Transforms insights into actionable bullets
+- **Insight -> Bullet conversion**: Transforms insights into actionable bullets
 - **Duplicate detection**: Prevents redundant knowledge
 - **Quality filtering**: Rejects low-confidence or trivial insights
-- **Lifecycle management**: Quarantine → Active → Shared promotion
+- **Lifecycle management**: Quarantine -> Active -> Shared promotion
 - **Maintenance operations**: Pruning and deduplication (stubs for now)
 
 **Curation Flow:**
 ```
 Insight (from Reflector)
-    ↓
+    
 Filter (confidence < 0.5, too short, etc.)
-    ↓
+    
 Convert to Bullet
-    ↓
+    
 Check Duplicates
-    ↓
+    
 Add to Memory (QUARANTINED status)
-    ↓
+    
 Outcome-based validation
-    ↓
+    
 ACTIVE status (helpful_count >= 2, harmful_count == 0)
-    ↓
+    
 PROMOTE TO SHARED (helpful_count >= 3, harmful_count == 0)
 ```
 
@@ -76,22 +76,22 @@ Orchestrates the complete learning cycle.
 
 ```
 1. Execute Task
-    ↓
+    
 2. Generate ExecutionTrace
-    ↓
-3. Check Tick Rate → Determine Reflection Depth
-    ↓
+    
+3. Check Tick Rate -> Determine Reflection Depth
+    
 4. Reflect (if tick rate sufficient)
-    ↓
+    
 5. Extract Insights
-    ↓
-6. Curate Insights → Create Bullets
-    ↓
+    
+6. Curate Insights -> Create Bullets
+    
 7. Add Bullets to Memory (QUARANTINED)
-    ↓
+    
 8. Record Outcome for Bullets Used
-    ↓
-9. Successful Bullets → ACTIVE → SHARED
+    
+9. Successful Bullets -> ACTIVE -> SHARED
 ```
 
 **Key Features:**
@@ -108,7 +108,7 @@ Orchestrates the complete learning cycle.
 
 ## Critical Design Principles
 
-### ✅ 1. **Ticks Gate Reflection Depth, NOT Scoring**
+###  1. **Ticks Gate Reflection Depth, NOT Scoring**
 
 **CORRECT:**
 ```python
@@ -120,12 +120,12 @@ if should_reflect:
 
 **INCORRECT:**
 ```python
-# ❌ NEVER use ticks to directly update scores
+#  NEVER use ticks to directly update scores
 if tick_high:
     bullet.helpful_count += 1  # WRONG!
 ```
 
-### ✅ 2. **Outcome-Based Scoring (NOT Tick-Based)**
+###  2. **Outcome-Based Scoring (NOT Tick-Based)**
 
 **CORRECT:**
 ```python
@@ -136,7 +136,7 @@ else:
     memory.record_outcome(bullet_ids, helpful=False)
 ```
 
-### ✅ 3. **Reflector Proposes, Curator Decides**
+###  3. **Reflector Proposes, Curator Decides**
 
 ```
 Reflector: "I found these insights..."
@@ -144,15 +144,15 @@ Curator: "I'll add these 3, skip these 2 duplicates"
 Memory: "Added to quarantine, awaiting validation"
 ```
 
-### ✅ 4. **Incremental Addition, Never Wholesale Rewrite**
+###  4. **Incremental Addition, Never Wholesale Rewrite**
 
 ACE principle: Contexts grow incrementally, never rewritten wholesale.
 
 ```python
-# ✅ Add new bullet
+#  Add new bullet
 curator.curate(insights, hemisphere, auto_add=True)
 
-# ❌ Rewrite entire playbook
+#  Rewrite entire playbook
 # playbook = llm.summarize(old_playbook)  # WRONG!
 ```
 
@@ -160,18 +160,18 @@ curator.curate(insights, hemisphere, auto_add=True)
 
 ```
 core/memory/
-├── __init__.py                  # ✅ Updated exports
-├── bullet.py                    # Bullet dataclass (Phase 1)
-├── procedural_store.py          # Low-level store (Phase 1)
-├── procedural_memory.py         # High-level API (Phase 1)
-├── retrieval.py                 # Advanced retrieval (Phase 1)
-├── reflector.py                 # ✨ NEW (Phase 2)
-├── curator.py                   # ✨ NEW (Phase 2)
-└── learning_pipeline.py         # ✨ NEW (Phase 2)
+ __init__.py                  #  Updated exports
+ bullet.py                    # Bullet dataclass (Phase 1)
+ procedural_store.py          # Low-level store (Phase 1)
+ procedural_memory.py         # High-level API (Phase 1)
+ retrieval.py                 # Advanced retrieval (Phase 1)
+ reflector.py                 #  NEW (Phase 2)
+ curator.py                   #  NEW (Phase 2)
+ learning_pipeline.py         #  NEW (Phase 2)
 
 examples/
-├── procedural_memory_example.py # Phase 1 examples
-└── learning_pipeline_example.py # ✨ NEW (Phase 2)
+ procedural_memory_example.py # Phase 1 examples
+ learning_pipeline_example.py #  NEW (Phase 2)
 ```
 
 ## Example Usage
@@ -306,8 +306,8 @@ class LeftBrain:
 6. **Multi-modal insights** - Extract from visual/audio traces
 
 ### Recommended Order:
-1. ✅ **Phase 1**: Procedural memory foundation → DONE
-2. ✅ **Phase 2**: Reflection & curation pipeline → DONE
+1.  **Phase 1**: Procedural memory foundation -> DONE
+2.  **Phase 2**: Reflection & curation pipeline -> DONE
 3. **Phase 3**: MCP integration for automatic learning
 4. **Phase 4**: Advanced deduplication & pruning
 5. **Phase 5**: Cross-hemisphere learning & suggestions
@@ -343,22 +343,22 @@ procedural_memory:
 ## Key Takeaways
 
 ### What Phase 2 Adds:
-- ✅ **Automated learning** from execution traces
-- ✅ **Tick-gated reflection** (depth, not scoring)
-- ✅ **Insight extraction** with evidence
-- ✅ **Quality-controlled curation**
-- ✅ **Complete learning pipeline**
+-  **Automated learning** from execution traces
+-  **Tick-gated reflection** (depth, not scoring)
+-  **Insight extraction** with evidence
+-  **Quality-controlled curation**
+-  **Complete learning pipeline**
 
 ### Critical Reminders:
-- ⚠️ **Ticks gate DEPTH**, not scoring
-- ⚠️ **Outcomes update SCORES**, not ticks
-- ⚠️ **Reflector proposes**, Curator decides
-- ⚠️ **Add incrementally**, never rewrite
-- ⚠️ **Start QUARANTINED**, promote with validation
+-  **Ticks gate DEPTH**, not scoring
+-  **Outcomes update SCORES**, not ticks
+-  **Reflector proposes**, Curator decides
+-  **Add incrementally**, never rewrite
+-  **Start QUARANTINED**, promote with validation
 
 ---
 
-**Status:** ✅ Phase 2 Complete - Learning Pipeline Implemented
+**Status:**  Phase 2 Complete - Learning Pipeline Implemented
 
 **Date:** December 24, 2025
 

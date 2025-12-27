@@ -1,4 +1,4 @@
-## Phase 6: Cross-Hemisphere Learning — Implementation Guide
+## Phase 6: Cross-Hemisphere Learning - Implementation Guide
 
 **Last Updated:** December 24, 2025
 
@@ -8,7 +8,7 @@
 
 Phase 6 implements **controlled cross-hemisphere teaching** while preserving bicameral separation. The left and right hemispheres primarily learn independently, but can **suggest**, **teach**, and **promote** procedural knowledge through a filtered channel that prevents contamination and convergence.
 
-**Key Insight:** Cross-teaching improves capability *only if it’s gated*. Unfiltered sharing collapses diversity and turns two hemispheres into one bland agent.
+**Key Insight:** Cross-teaching improves capability *only if it's gated*. Unfiltered sharing collapses diversity and turns two hemispheres into one bland agent.
 
 ---
 
@@ -17,9 +17,9 @@ Phase 6 implements **controlled cross-hemisphere teaching** while preserving bic
 ### Problems Without Cross-Hemisphere Learning
 
 * **No transfer:** A useful tool rule discovered by Left never reaches Right (and vice versa)
-* **Slow convergence:** Shared “muscle memory” takes too long to form
-* **Repeated mistakes:** One hemisphere repeats the other’s already-solved failure modes
-* **No controlled teaching:** Users can’t intentionally transfer knowledge across hemispheres
+* **Slow convergence:** Shared "muscle memory" takes too long to form
+* **Repeated mistakes:** One hemisphere repeats the other's already-solved failure modes
+* **No controlled teaching:** Users can't intentionally transfer knowledge across hemispheres
 * **Undetected contradictions:** Left and Right can accumulate procedural rules that conflict
 * **Loss of bicameral effect:** Naive sharing makes both sides behave the same
 
@@ -48,7 +48,7 @@ Phase 6 implements **controlled cross-hemisphere teaching** while preserving bic
 |   |   - Not yet shared-worthy
 |   |
 |   +-- Create Suggestion Record
-|       - from_side → to_side
+|       - from_side -> to_side
 |       - origin bullet id
 |       - reason + tags
 |       - status: pending
@@ -103,8 +103,8 @@ Phase 6 implements **controlled cross-hemisphere teaching** while preserving bic
 
 **Key Features**
 
-* Stores suggestion lifecycle: `pending → delivered → accepted/rejected/expired`
-* Immutable origin tracking (prevents “who taught who?” ambiguity)
+* Stores suggestion lifecycle: `pending -> delivered -> accepted/rejected/expired`
+* Immutable origin tracking (prevents "who taught who?" ambiguity)
 * Supports throttled delivery
 * Supports manual teaching mode (high-priority suggestions)
 
@@ -196,7 +196,7 @@ def create_suggestion(from_side, to_side, bullet, reason) -> Suggestion:
 
 ## 3. Suggestion Delivery (Meta-Controller Tick Hook)
 
-**Purpose:** Deliver suggestions only when it won’t destabilize active problem-solving
+**Purpose:** Deliver suggestions only when it won't destabilize active problem-solving
 
 **Implementation:** extend Meta-Controller tick loop (wherever ticks are coordinated) and/or `core/memory/learning_pipeline.py`
 
@@ -258,7 +258,7 @@ def apply_suggestion_to_hemisphere(memory_store, suggestion):
 
 * Teach existing bullet ID across hemispheres
 * Teach raw text as new quarantined bullet
-* Optional translation step (rewrite to match receiving hemisphere’s style contract)
+* Optional translation step (rewrite to match receiving hemisphere's style contract)
 
 **API**
 
@@ -271,7 +271,7 @@ class TeachingAPI:
 **Translation Strategy**
 
 * Conservative v1: minimal rewrite, preserve semantics
-* “Neutralize” hard directives when needed:
+* "Neutralize" hard directives when needed:
 
   * left-style: strict checklist / must
   * right-style: exploratory constraint / consider
@@ -287,7 +287,7 @@ class TeachingAPI:
 **Conflict Types**
 
 * Same domain/tags but opposite directives
-* “Must do X” vs “Never do X”
+* "Must do X" vs "Never do X"
 * Two mutually exclusive tool schemas or action rules
 
 **Detection Heuristic (v1)**
@@ -313,7 +313,7 @@ def detect_conflict(a: Bullet, b: Bullet, sim: float) -> bool:
 * **Default (safe):** quarantine newcomer + attach `conflicts_with=[...]`
 * Optional later: create a conditional shared bullet:
 
-  * “If context A → use rule X, else → use rule Y”
+  * "If context A -> use rule X, else -> use rule Y"
 
 ---
 
@@ -335,7 +335,7 @@ def detect_conflict(a: Bullet, b: Bullet, sim: float) -> bool:
 **Translation on Promote**
 
 * Store a **side-neutral shared formulation**
-* Preserve origin metadata (don’t lose lineage)
+* Preserve origin metadata (don't lose lineage)
 
 ```python
 def can_promote_to_shared(bullet, config) -> bool:
@@ -352,7 +352,7 @@ def can_promote_to_shared(bullet, config) -> bool:
 
 ## 7. Diversity Preservation & Drift Monitoring
 
-**Purpose:** Ensure Phase 6 doesn’t destroy the bicameral effect
+**Purpose:** Ensure Phase 6 doesn't destroy the bicameral effect
 
 **Implementation:** `core/memory/diversity_metrics.py` (new)
 
@@ -362,7 +362,7 @@ def can_promote_to_shared(bullet, config) -> bool:
 * Average embedding centroid distance
 * Suggestion acceptance rate
 * Cross-teaching volume per day
-* “Convergence warning” threshold
+* "Convergence warning" threshold
 
 **Policy Response**
 
@@ -575,7 +575,7 @@ Tests should cover:
 * `config/config.yaml` - Phase 6 configuration section
 
 ---
-Got it — here’s the **Phase 6 addendum** that makes **“Forced exploration periods”** explicit, *without changing the plan’s structure*. This slots into the Phase 6 guide as a dedicated component + config + tests.
+Got it - here's the **Phase 6 addendum** that makes **"Forced exploration periods"** explicit, *without changing the plan's structure*. This slots into the Phase 6 guide as a dedicated component + config + tests.
 
 ---
 
@@ -583,7 +583,7 @@ Got it — here’s the **Phase 6 addendum** that makes **“Forced exploration 
 
 ### Overview
 
-Forced exploration periods ensure the system doesn’t over-converge into the Left hemisphere’s stability loop. They periodically bias control toward the Right hemisphere to generate alternatives, probe assumptions, and uncover missing constraints—especially when the system has been “too successful” in a narrow pattern.
+Forced exploration periods ensure the system doesn't over-converge into the Left hemisphere's stability loop. They periodically bias control toward the Right hemisphere to generate alternatives, probe assumptions, and uncover missing constraints - especially when the system has been "too successful" in a narrow pattern.
 
 **Key Insight:** Homogenization can happen even without cross-teaching. Success reinforces routines. Forced exploration protects long-term adaptability.
 
@@ -592,7 +592,7 @@ Forced exploration periods ensure the system doesn’t over-converge into the Le
 ## What This Solves
 
 * **Left-lock / exploitation trap:** system keeps selecting safe known patterns even when conditions shift
-* **Idea starvation:** Right hemisphere doesn’t get enough “turns” to diversify policy
+* **Idea starvation:** Right hemisphere doesn't get enough "turns" to diversify policy
 * **Silent brittleness:** system fails catastrophically on novelty because novelty handling atrophied
 * **Convergence drift:** left/right behavioral difference shrinks over time
 
@@ -648,7 +648,7 @@ It does **not**:
 
 * `force_right_lead: bool`
 * `force_right_critic: bool` (Right critiques a Left lead)
-* `exploration_budget_update`: +/− adjustments
+* `exploration_budget_update`: +/- adjustments
 
 ### Quota Mode Algorithm
 
@@ -676,10 +676,10 @@ def stuck_in_same_side(history, config) -> bool:
 
 ### Selection Rule (Priority)
 
-1. If **high-risk task** and `exploration_safe_override=False` → don’t force Right lead (allow Right critic only)
-2. If **stuck** → force Right lead
-3. If **drift detected** → increase Right frequency + force Right lead
-4. If **quota violated** → force Right lead
+1. If **high-risk task** and `exploration_safe_override=False` -> don't force Right lead (allow Right critic only)
+2. If **stuck** -> force Right lead
+3. If **drift detected** -> increase Right frequency + force Right lead
+4. If **quota violated** -> force Right lead
 5. Else normal arbitration
 
 ---
@@ -778,11 +778,11 @@ Assertions:
 
 ## Checklist Mapping
 
-✅ Forced exploration periods
+- Forced exploration periods
 
 * implemented as **ExplorationPolicy** + config + metrics + tests
 * integrates with **meta-controller tick** (no architectural changes)
 
 ---
 
-If you want, I can also fold this into the Phase 6 guide section order cleanly (as “Component 8”) so it stays consistent with the rest of the plan.
+If you want, I can also fold this into the Phase 6 guide section order cleanly (as "Component 8") so it stays consistent with the rest of the plan.

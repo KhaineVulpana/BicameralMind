@@ -60,7 +60,7 @@ def example_basic_usage():
     }
     memory = ProceduralMemory(config)
 
-    console.print("\n[green]✓[/green] Initialized ProceduralMemory")
+    console.print("\n[green]OK[/green] Initialized ProceduralMemory")
 
     # Add some bullets to left brain
     console.print("\n[bold]Adding bullets to LEFT brain...[/bold]")
@@ -81,7 +81,7 @@ def example_basic_usage():
             confidence=0.7,
             status=BulletStatus.ACTIVE,  # Start active for demo
         )
-        console.print(f"  ✓ Added: {bullet.id[:12]}... [{btype.value}]")
+        console.print(f"  OK Added: {bullet.id[:12]}... [{btype.value}]")
 
     # Add some bullets to right brain
     console.print("\n[bold]Adding bullets to RIGHT brain...[/bold]")
@@ -101,7 +101,7 @@ def example_basic_usage():
             confidence=0.6,
             status=BulletStatus.ACTIVE,
         )
-        console.print(f"  ✓ Added: {bullet.id[:12]}... [{btype.value}]")
+        console.print(f"  OK Added: {bullet.id[:12]}... [{btype.value}]")
 
     # Retrieve bullets
     console.print("\n[bold]Retrieving bullets for query: 'How to handle API errors?'[/bold]")
@@ -152,7 +152,7 @@ def example_outcome_based_learning():
         confidence=0.5,
         status=BulletStatus.QUARANTINED,  # Start quarantined
     )
-    console.print(f"  ✓ Added quarantined bullet: {bullet.id[:12]}...")
+    console.print(f"  OK Added quarantined bullet: {bullet.id[:12]}...")
     console.print(f"    Status: {bullet.status.value}")
     console.print(f"    Score: {bullet.score():.2f}")
 
@@ -160,7 +160,7 @@ def example_outcome_based_learning():
     console.print("\n[bold]Simulating successful outcomes...[/bold]")
     for i in range(4):
         memory.record_outcome([bullet.id], helpful=True, side=Hemisphere.LEFT)
-        console.print(f"  ✓ Recorded helpful outcome #{i+1}")
+        console.print(f"  OK Recorded helpful outcome #{i+1}")
 
     # Retrieve again to see updated bullet
     console.print("\n[bold]Retrieving updated bullet...[/bold]")
@@ -258,7 +258,7 @@ def main():
         import traceback
         traceback.print_exc()
 
-    console.print("\n[bold green]✓ Examples completed![/bold green]")
+    console.print("\n[bold green]OK Examples completed![/bold green]")
 
 
 if __name__ == "__main__":

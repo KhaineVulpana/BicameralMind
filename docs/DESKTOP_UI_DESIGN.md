@@ -139,7 +139,7 @@ Real-time monitoring of the bicameral mind system state, memory usage, and learn
 |  | Mode: EXPLORE     |  | Left:  243 bullets        |   |
 |  | Tick: 0.75        |  | Right: 412 bullets        |   |
 |  | Active: RIGHT     |  | Shared: 87 bullets        |   |
-|  | Model: llama3:8b  |  |                            |   |
+|  | Model: qwen3:14b  |  |                            |   |
 |  | Health: OK        |  | [Quality Distribution]    |   |
 |  +-------------------+  |    Chart showing quality  |   |
 |                         +----------------------------+   |

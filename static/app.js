@@ -1,4 +1,4 @@
-﻿// WebSocket connection
+// WebSocket connection
 let ws = null;
 let isConnected = false;
 const chatMetrics = {

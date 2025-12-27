@@ -1,4 +1,4 @@
-﻿"""Config loader for BicameralMind."""
+"""Config loader for BicameralMind."""
 from __future__ import annotations
 
 from pathlib import Path

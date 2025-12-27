@@ -104,7 +104,7 @@ class MetaController:
     async def start_ticker(self):
         """Start the consciousness tick loop"""
         self.running = True
-        logger.info("🧠 Meta-Controller: Consciousness tick system activated")
+        logger.info(" Meta-Controller: Consciousness tick system activated")
 
         while self.running:
             # Use adaptive tick interval if enabled
@@ -115,7 +115,7 @@ class MetaController:
     def stop_ticker(self):
         """Stop the consciousness tick loop"""
         self.running = False
-        logger.info("🧠 Meta-Controller: Consciousness tick system deactivated")
+        logger.info(" Meta-Controller: Consciousness tick system deactivated")
     
     async def _tick(self):
         """Single consciousness tick - reevaluate state"""
@@ -166,7 +166,7 @@ class MetaController:
 
         # Log if significant
         if self._is_significant_tick(metrics):
-            logger.debug(f"⚡ Consciousness Tick #{self._tick_count}: {decision} | Mode: {self.mode.value}")
+            logger.debug(f" Consciousness Tick #{self._tick_count}: {decision} | Mode: {self.mode.value}")
 
         self._last_tick = current_time
 
@@ -286,7 +286,7 @@ class MetaController:
         # Track mode switches
         if previous_mode != self.mode:
             self._last_mode_switch = time.time()
-            logger.info(f"🔄 Mode Switch: {previous_mode.value} → {self.mode.value}")
+            logger.info(f" Mode Switch: {previous_mode.value} -> {self.mode.value}")
         
         return decision, forced, forced_reason
 

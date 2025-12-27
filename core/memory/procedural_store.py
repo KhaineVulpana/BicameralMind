@@ -136,7 +136,7 @@ class ProceduralMemoryStore:
             self._collections[side] = self._client.get_or_create_collection(name=cname)
 
         logger.info(
-            f"🧩 ProceduralMemoryStore ready | dir={self.persist_directory} | embed={self.embedding_model}"
+            f" ProceduralMemoryStore ready | dir={self.persist_directory} | embed={self.embedding_model}"
         )
 
     @staticmethod
@@ -235,12 +235,20 @@ class ProceduralMemoryStore:
 
             # Chroma doesn't support list-contains well across backends; we store tags as comma string.
             # We keep tag filtering lightweight here; stronger filtering can be done post-query.
-            res = col.query(
-                query_embeddings=[qemb],
-                n_results=top_k,
-                where=where,
-                include=["documents", "metadatas", "distances"],
-            )
+            try:
+                if col.count() == 0:
+                    return []
+                res = col.query(
+                    query_embeddings=[qemb],
+                    n_results=top_k,
+                    where=where,
+                    include=["documents", "metadatas", "distances"],
+                )
+            except Exception as e:
+                if "Nothing found on disk" in str(e):
+                    logger.warning(f"Chroma query failed for {s}: {e}")
+                    return []
+                raise
             ids = res.get("ids", [[]])[0]  # Chroma always returns ids even if not in include
             docs = res.get("documents", [[]])[0]
             metas = res.get("metadatas", [[]])[0]

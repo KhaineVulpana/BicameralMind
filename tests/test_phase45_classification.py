@@ -10,6 +10,7 @@ Verifies:
 
 import pytest
 import asyncio
+import tempfile
 from pathlib import Path
 import sys
 
@@ -26,20 +27,21 @@ from core.memory import (
     InsightType
 )
 from core.memory.hemisphere_classifier import HemisphereClassifier
-from core.memory.meta_bullets import check_meta_bullets_installed
+from core.memory.meta_bullets import check_meta_bullets_installed, install_meta_bullets
 
 
-@pytest.fixture
-def config():
+@pytest.fixture(scope="module")
+def config(tmp_path_factory):
     """Test configuration with staging enabled."""
+    base_dir = tmp_path_factory.mktemp("classification_memory")
     return {
         "model": {
-            "name": "llama3:8b",
+            "name": "qwen3:14b",
             "temperature": 0.7
         },
         "procedural_memory": {
             "enabled": True,
-            "persist_directory": "./test_data/memory/test_classification",
+            "persist_directory": str(base_dir),
             "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
             "staging": {
                 "enabled": True,
@@ -58,7 +60,8 @@ def memory(config):
 
     # Verify meta-bullets are installed
     if not check_meta_bullets_installed(mem):
-        pytest.skip("Meta-bullets not installed - run scripts/install_meta_bullets.py first")
+        install_meta_bullets(mem)
+        assert check_meta_bullets_installed(mem), "Meta-bullets failed to install in test memory"
 
     return mem
 
@@ -224,13 +227,13 @@ async def test_ambiguous_classification(memory):
 
 
 @pytest.mark.asyncio
-async def test_classification_workflow():
+async def test_classification_workflow(tmp_path):
     """Integration test for full classification workflow."""
     config = {
-        "model": {"name": "llama3:8b"},
+        "model": {"name": "qwen3:14b"},
         "procedural_memory": {
             "enabled": True,
-            "persist_directory": "./data/memory/procedural",  # Use main directory
+            "persist_directory": str(tmp_path),
             "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
             "staging": {
                 "enabled": True,
@@ -246,9 +249,8 @@ async def test_classification_workflow():
 
     # Verify meta-bullets
     if not check_meta_bullets_installed(memory):
-        print("[WARN] Meta-bullets not found - this test requires meta-bullets to be installed")
-        print("[INFO] Run: python scripts/install_meta_bullets.py")
-        return
+        install_meta_bullets(memory)
+        assert check_meta_bullets_installed(memory), "Meta-bullets failed to install in workflow memory"
 
     curator = Curator(memory)
 
@@ -290,5 +292,6 @@ async def test_classification_workflow():
 if __name__ == "__main__":
     # Run tests
     print("Testing Phase 4.5: Hemisphere Classification...")
-    asyncio.run(test_classification_workflow())
+    with tempfile.TemporaryDirectory() as temp_dir:
+        asyncio.run(test_classification_workflow(tmp_path=Path(temp_dir)))
     print("\n[PASS] Classification workflow test passed!")

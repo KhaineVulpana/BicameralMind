@@ -1,19 +1,19 @@
 #!/bin/bash
 # Bicameral Mind Setup Script
 
-echo "🧠 Bicameral Mind Setup"
+echo " Bicameral Mind Setup"
 echo "======================="
 
 # Check Python version
 python_version=$(python3 --version 2>&1 | awk '{print $2}')
-echo "✓ Python version: $python_version"
+echo "OK Python version: $python_version"
 
 # Check Ollama
 if ! command -v ollama &> /dev/null; then
-    echo "⚠ Ollama not found. Install from: https://ollama.ai"
+    echo " Ollama not found. Install from: https://ollama.ai"
     exit 1
 fi
-echo "✓ Ollama installed"
+echo "OK Ollama installed"
 
 # Install Python dependencies
 echo ""
@@ -27,18 +27,17 @@ mkdir -p data/knowledge_base data/vector_store data/memory logs
 
 # Pull recommended model
 echo ""
-echo "Pulling recommended model (qwen2.5:14b)..."
+echo "Pulling recommended model (qwen3:14b)..."
 echo "This may take a while..."
-ollama pull qwen2.5:14b
+ollama pull qwen3:14b
 
 # Alternative models
 echo ""
 echo "Other recommended models:"
 echo "  - ollama pull llama3.1:8b    (smaller, faster)"
-echo "  - ollama pull qwen2.5:32b    (larger, smarter)"
 echo "  - ollama pull mistral         (alternative)"
 
 echo ""
-echo "✨ Setup complete!"
+echo " Setup complete!"
 echo ""
 echo "Run: python main.py"

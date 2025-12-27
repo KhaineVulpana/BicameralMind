@@ -15,8 +15,11 @@ class LLMClient(Ollama):
 
     def __init__(self, config: Dict[str, Any] | None = None):
         model_config = (config or {}).get("model", {})
-        super().__init__(
-            model=model_config.get("name", "qwen2.5:14b"),
-            temperature=model_config.get("temperature", 0.7),
-            base_url=model_config.get("base_url"),
-        ) 
+        kwargs = {
+            "model": model_config.get("name", "qwen3:14b"),
+            "temperature": model_config.get("temperature", 0.7),
+        }
+        base_url = model_config.get("base_url")
+        if base_url:
+            kwargs["base_url"] = base_url
+        super().__init__(**kwargs)

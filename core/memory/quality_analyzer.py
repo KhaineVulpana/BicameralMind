@@ -2,7 +2,7 @@
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
 from .bullet import Bullet, BulletStatus
@@ -106,7 +106,8 @@ class QualityAnalyzer:
 
         days_since_last_use = None
         if bullet.last_used_at:
-            days_since_last_use = (datetime.now() - bullet.last_used_at).days
+            last_used_at = self._normalize_datetime(bullet.last_used_at)
+            days_since_last_use = (datetime.utcnow() - last_used_at).days
 
         # Calculate quality score
         quality_score = self._calculate_quality_score(bullet)
@@ -161,16 +162,15 @@ class QualityAnalyzer:
 
     def _calculate_age_days(self, bullet: Bullet) -> int:
         """Calculate bullet age in days"""
-        # Handle both timezone-aware and naive datetimes
-        now = datetime.now()
-        if bullet.created_at.tzinfo is not None:
-            # created_at is timezone-aware, make now aware too
-            from datetime import timezone
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
-            created_at = bullet.created_at.replace(tzinfo=None)
-        else:
-            created_at = bullet.created_at
-        return (now - created_at).days
+        created_at = self._normalize_datetime(bullet.created_at)
+        return (datetime.utcnow() - created_at).days
+
+    @staticmethod
+    def _normalize_datetime(value: datetime) -> datetime:
+        """Normalize datetimes to naive UTC for safe arithmetic."""
+        if value.tzinfo is None:
+            return value
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
 
     def _calculate_quality_score(self, bullet: Bullet) -> float:
         """

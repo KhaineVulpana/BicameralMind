@@ -75,7 +75,7 @@ async def example_2_tool_execution_with_learning():
 
     llm_config = {
         "model": {
-            "name": "llama3:8b",
+            "name": "qwen3:14b",
             "temperature": 0.7,
         }
     }
@@ -142,7 +142,7 @@ async def example_3_learning_from_failures():
 
     # Setup (same as example 2)
     memory_config = {"procedural_memory": {"enabled": True}}
-    llm_config = {"model": {"name": "llama3:8b"}}
+    llm_config = {"model": {"name": "qwen3:14b"}}
     mcp_config = {"mcp": {"enabled": True, "servers": [{"name": "filesystem", "type": "stdio", "enabled": True}]}}
 
     memory = ProceduralMemory(memory_config)
@@ -192,7 +192,7 @@ async def example_4_tool_usage_tracking():
 
     # Setup
     memory_config = {"procedural_memory": {"enabled": True}}
-    llm_config = {"model": {"name": "llama3:8b"}}
+    llm_config = {"model": {"name": "qwen3:14b"}}
     mcp_config = {"mcp": {"enabled": True, "servers": [{"name": "filesystem", "type": "stdio", "enabled": True}]}}
 
     memory = ProceduralMemory(memory_config)
@@ -246,7 +246,7 @@ async def example_5_hemisphere_specific_learning():
 
     # Setup
     memory_config = {"procedural_memory": {"enabled": True}}
-    llm_config = {"model": {"name": "llama3:8b"}}
+    llm_config = {"model": {"name": "qwen3:14b"}}
     mcp_config = {"mcp": {"enabled": True, "servers": [{"name": "filesystem", "type": "stdio", "enabled": True}]}}
 
     memory = ProceduralMemory(memory_config)

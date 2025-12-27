@@ -44,7 +44,7 @@ def config():
     """Full system configuration."""
     return {
         "model": {
-            "name": "llama3:8b",
+            "name": "qwen3:14b",
             "temperature": 0.7
         },
         "left_brain": {
@@ -338,7 +338,7 @@ if __name__ == "__main__":
     print("Testing end-to-end integration...")
     asyncio.run(test_end_to_end_learning_cycle(
         config={
-            "model": {"name": "llama3:8b", "temperature": 0.7},
+            "model": {"name": "qwen3:14b", "temperature": 0.7},
             "left_brain": {"k_bullets": 8, "min_bullet_confidence": 0.5},
             "right_brain": {"k_bullets": 12, "min_bullet_confidence": 0.3},
             "procedural_memory": {

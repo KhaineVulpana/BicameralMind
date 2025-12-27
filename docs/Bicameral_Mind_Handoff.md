@@ -14,7 +14,7 @@ Learning from success/failure without weight updates
 
 Persistent, inspectable procedural memory
 
-Consciousness-like “ticks” as attention and learning gates
+Consciousness-like "ticks" as attention and learning gates
 
 1. High-level goals
 
@@ -47,7 +47,7 @@ Two Hemispheres (Agents)
 
 The system consists of two distinct agent roles, both powered by the same base LLM, but behaving differently due to context, memory, and retrieval strategy.
 
-Left Hemisphere — Pattern Continuity
+Left Hemisphere - Pattern Continuity
 
 Role:
 
@@ -61,7 +61,7 @@ Tool correctness
 
 Validation
 
-“What has worked reliably before?”
+"What has worked reliably before?"
 
 Characteristics:
 
@@ -83,7 +83,7 @@ Schema validation
 
 Error avoidance heuristics
 
-Right Hemisphere — Pattern Violation
+Right Hemisphere - Pattern Violation
 
 Role:
 
@@ -95,7 +95,7 @@ Hypothesis generation
 
 Reframing
 
-“What if the pattern is wrong?”
+"What if the pattern is wrong?"
 
 Characteristics:
 
@@ -120,7 +120,7 @@ Creative problem solving
 Important constraint
 
 Neither hemisphere is allowed to overwrite the other directly.
-This preserves cognitive diversity and prevents collapse into a single “average” policy.
+This preserves cognitive diversity and prevents collapse into a single "average" policy.
 
 3. Procedural Memory (NOT RAG)
 Key distinction
@@ -129,7 +129,7 @@ The system uses two different kinds of memory:
 
 Memory Type	Purpose	Stored As
 Knowledge RAG	Facts, docs, papers	Standard RAG vector store
-Procedural Memory	“What works”	ACE-style bullet playbooks
+Procedural Memory	"What works"	ACE-style bullet playbooks
 
 Procedural memory is not factual knowledge.
 It must never be mixed into standard RAG.
@@ -187,7 +187,7 @@ side              # left | right | shared
 type              # tool_rule | heuristic | checklist | pitfall | template
 text              # the actual bullet
 tags              # tool/domain labels
-confidence        # float 0–1
+confidence        # float 0-1
 helpful_count
 harmful_count
 status            # active | quarantined | deprecated
@@ -235,7 +235,7 @@ A cognitive clock and pressure signal.
 
 A tick represents:
 
-“Pause. Evaluate. Decide whether memory should change.”
+"Pause. Evaluate. Decide whether memory should change."
 
 Tick frequency as pressure
 Tick Rate	Meaning
@@ -260,7 +260,7 @@ Ticks must NEVER directly increment helpful/harmful counters.
 
 If they do:
 
-Time spent ≠ truth
+Time spent = truth
 
 Loops self-reinforce
 
@@ -289,7 +289,7 @@ Tool/schema failure
 
 Contradiction with evidence
 
-User correction (“that’s wrong”)
+User correction ("that's wrong")
 
 Test failure
 

@@ -1,10 +1,14 @@
 """Test MCP Integration"""
 import asyncio
+import shutil
 import sys
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
+
+import pytest
+import pytest_asyncio
 
 from integrations.mcp import (
     MCPClient,
@@ -24,13 +28,8 @@ def print_section(title):
     print(f" {title}")
     print(f"{'=' * 60}\n")
 
-
-async def test_mcp_client():
-    """Test MCP client connection and tool discovery"""
-    print_section("Test 1: MCP Client")
-
-    # Configuration
-    config = {
+def _mcp_config():
+    return {
         "mcp": {
             "enabled": True,
             "connection_timeout": 30,
@@ -41,19 +40,93 @@ async def test_mcp_client():
                     "type": "stdio",
                     "command": "npx",
                     "args": ["-y", "@modelcontextprotocol/server-filesystem", "./data"],
+                    "tool_timeout": 30,
                     "enabled": True,
                 },
             ],
         }
     }
 
-    # Initialize client
-    client = MCPClient(config)
+
+def _tool_context():
+    return ToolExecutionContext(
+        tool_name="read_file",
+        parameters={"path": "./README.md"},
+        hemisphere="left",
+        confidence=0.8,
+        expected_success=True,
+        bullets_used=["test_bullet_1", "test_bullet_2"],
+    )
+
+
+@pytest_asyncio.fixture(scope="module")
+async def client():
+    if not shutil.which("npx"):
+        pytest.skip("npx not available for MCP integration tests")
+    mcp_client = MCPClient(_mcp_config())
+    await mcp_client.connect()
+    yield mcp_client
+    await mcp_client.disconnect()
+
+
+@pytest_asyncio.fixture
+async def executor(client):
+    return ToolExecutor(client)
+
+
+@pytest.fixture
+def execution_context():
+    return _tool_context()
+
+
+@pytest_asyncio.fixture
+async def execution_result(executor, execution_context):
+    return await executor.execute(execution_context)
+
+
+@pytest_asyncio.fixture(scope="module")
+async def mcp_learning(client):
+    memory_config = {
+        "procedural_memory": {
+            "enabled": True,
+            "persist_directory": "./data/memory/procedural_test",
+            "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+            "promote_threshold": 3,
+            "quarantine_threshold": 2,
+        }
+    }
+
+    llm_config = {
+        "model": {
+            "name": "qwen3:14b",
+            "temperature": 0.7,
+        }
+    }
+
+    memory = ProceduralMemory(memory_config)
+    llm = LLMClient(llm_config)
+    meta_controller = MetaController(llm_config, None, None)  # Simplified for testing
+    pipeline = LearningPipeline(memory, llm)
+
+    return MCPLearningIntegration(
+        mcp_client=client,
+        procedural_memory=memory,
+        meta_controller=meta_controller,
+        learning_pipeline=pipeline,
+        config={
+            "auto_learn": True,
+            "learn_on_success": True,
+            "learn_on_failure": True,
+        },
+    )
+
+async def test_mcp_client(client):
+    """Test MCP client connection and tool discovery"""
+    print_section("Test 1: MCP Client")
+
     print(f"[OK] MCP Client initialized")
     print(f"     Servers configured: {len(client.servers)}")
 
-    # Connect
-    await client.connect()
     print(f"[OK] Connected to MCP servers")
 
     # List tools
@@ -68,36 +141,21 @@ async def test_mcp_client():
     print(f"       Connected servers: {stats['connected_servers']}/{stats['total_servers']}")
     print(f"       Available tools: {stats['available_tools']}")
 
-    return client
 
-
-async def test_tool_executor(client):
+async def test_tool_executor(executor, execution_result):
     """Test tool execution"""
     print_section("Test 2: Tool Executor")
 
-    executor = ToolExecutor(client)
     print(f"[OK] Tool Executor initialized")
 
-    # Create execution context
-    context = ToolExecutionContext(
-        tool_name="read_file",
-        parameters={"path": "./README.md"},
-        hemisphere="left",
-        confidence=0.8,
-        expected_success=True,
-        bullets_used=["test_bullet_1", "test_bullet_2"],
-    )
-
-    # Execute tool
-    print(f"[INFO] Executing tool: {context.tool_name}")
-    result = await executor.execute(context)
+    print(f"[INFO] Executing tool: read_file")
 
     print(f"[OK] Tool executed:")
-    print(f"     Success: {result.tool_result.success}")
-    print(f"     Execution time: {result.tool_result.execution_time:.3f}s")
-    print(f"     Steps: {len(result.execution_steps)}")
+    print(f"     Success: {execution_result.tool_result.success}")
+    print(f"     Execution time: {execution_result.tool_result.execution_time:.3f}s")
+    print(f"     Steps: {len(execution_result.execution_steps)}")
 
-    for i, step in enumerate(result.execution_steps, 1):
+    for i, step in enumerate(execution_result.execution_steps, 1):
         status = "[OK]" if step.get("success") else "[FAIL]"
         print(f"     {status} Step {i}: {step.get('description')}")
 
@@ -106,8 +164,6 @@ async def test_tool_executor(client):
     print(f"\n[INFO] Executor Stats:")
     print(f"       Total executions: {stats['total_executions']}")
     print(f"       Success rate: {stats['success_rate']:.1%}")
-
-    return executor, result
 
 
 async def test_trace_generator(execution_result):
@@ -136,55 +192,10 @@ async def test_trace_generator(execution_result):
     print(f"       Success rate: {stats['success_rate']:.1%}")
     print(f"       Tools used: {stats['tools_used']}")
 
-    return generator, trace
 
-
-async def test_learning_integration(client):
+async def test_learning_integration(mcp_learning):
     """Test complete MCP learning integration"""
     print_section("Test 4: Learning Integration")
-
-    # Initialize memory and learning components
-    memory_config = {
-        "procedural_memory": {
-            "enabled": True,
-            "persist_directory": "./data/memory/procedural_test",
-            "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
-            "promote_threshold": 3,
-            "quarantine_threshold": 2,
-        }
-    }
-
-    print("[INFO] Initializing procedural memory...")
-    memory = ProceduralMemory(memory_config)
-
-    print("[INFO] Initializing LLM client...")
-    llm_config = {
-        "model": {
-            "name": "llama3:8b",
-            "temperature": 0.7,
-        }
-    }
-    llm = LLMClient(llm_config)
-
-    print("[INFO] Initializing meta-controller...")
-    meta_controller = MetaController(llm_config, None, None)  # Simplified for testing
-
-    print("[INFO] Initializing learning pipeline...")
-    pipeline = LearningPipeline(memory, llm)
-
-    # Initialize MCP learning integration
-    print("[INFO] Initializing MCP learning integration...")
-    mcp_learning = MCPLearningIntegration(
-        mcp_client=client,
-        procedural_memory=memory,
-        meta_controller=meta_controller,
-        learning_pipeline=pipeline,
-        config={
-            "auto_learn": True,
-            "learn_on_success": True,
-            "learn_on_failure": True,
-        }
-    )
 
     print(f"[OK] MCP Learning Integration initialized\n")
 
@@ -212,10 +223,8 @@ async def test_learning_integration(client):
     print(f"       Learning sessions: {stats['learning_sessions']}")
     print(f"       Bullets created: {stats['bullets_created']}")
 
-    return mcp_learning
 
-
-async def test_failure_learning(client, mcp_learning):
+async def test_failure_learning(mcp_learning):
     """Test learning from tool failures"""
     print_section("Test 5: Learning from Failures")
 
@@ -264,22 +273,52 @@ async def main():
 
     try:
         # Test 1: MCP Client
-        client = await test_mcp_client()
+        manual_client = MCPClient(_mcp_config())
+        await manual_client.connect()
+        await test_mcp_client(manual_client)
 
         # Test 2: Tool Executor
-        executor, execution_result = await test_tool_executor(client)
+        manual_executor = ToolExecutor(manual_client)
+        manual_context = _tool_context()
+        manual_result = await manual_executor.execute(manual_context)
+        await test_tool_executor(manual_executor, manual_result)
 
         # Test 3: Trace Generator
-        generator, trace = await test_trace_generator(execution_result)
+        await test_trace_generator(manual_result)
 
         # Test 4: Learning Integration
-        mcp_learning = await test_learning_integration(client)
+        manual_memory_config = {
+            "procedural_memory": {
+                "enabled": True,
+                "persist_directory": "./data/memory/procedural_test",
+                "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+                "promote_threshold": 3,
+                "quarantine_threshold": 2,
+            }
+        }
+        manual_llm_config = {"model": {"name": "qwen3:14b", "temperature": 0.7}}
+        manual_memory = ProceduralMemory(manual_memory_config)
+        manual_llm = LLMClient(manual_llm_config)
+        manual_meta = MetaController(manual_llm_config, None, None)
+        manual_pipeline = LearningPipeline(manual_memory, manual_llm)
+        manual_learning = MCPLearningIntegration(
+            mcp_client=manual_client,
+            procedural_memory=manual_memory,
+            meta_controller=manual_meta,
+            learning_pipeline=manual_pipeline,
+            config={
+                "auto_learn": True,
+                "learn_on_success": True,
+                "learn_on_failure": True,
+            },
+        )
+        await test_learning_integration(manual_learning)
 
         # Test 5: Failure Learning
-        await test_failure_learning(client, mcp_learning)
+        await test_failure_learning(manual_learning)
 
         # Test 6: Tool Usage Stats
-        await test_tool_usage_stats(mcp_learning)
+        await test_tool_usage_stats(manual_learning)
 
         # Summary
         print_section("Test Summary")
@@ -293,7 +332,7 @@ async def main():
         print("  [OK] Statistics - Tool usage tracking")
 
         # Cleanup
-        await client.disconnect()
+        await manual_client.disconnect()
         print("\n[OK] Cleanup complete")
 
     except Exception as e:

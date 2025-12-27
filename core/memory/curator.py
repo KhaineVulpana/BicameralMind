@@ -4,7 +4,7 @@ The Curator is responsible for:
 1. Evaluating reflection insights
 2. Converting insights into bullets
 3. Deduplicating against existing knowledge
-4. Managing bullet lifecycle (quarantine → active → shared)
+4. Managing bullet lifecycle (quarantine -> active -> shared)
 5. Pruning low-quality bullets
 
 CRITICAL: The Curator is the ONLY component that writes to procedural memory.
@@ -32,7 +32,7 @@ class Curator:
 
     The Curator sits between the Reflector and ProceduralMemory:
 
-    Reflector → Insights → Curator → Bullets → ProceduralMemory
+    Reflector -> Insights -> Curator -> Bullets -> ProceduralMemory
 
     It ensures quality control and prevents memory pollution.
     """
@@ -76,7 +76,7 @@ class Curator:
             return []
 
         logger.debug(
-            f"📝 Curating {len(insights)} insights for {hemisphere.value}"
+            f" Curating {len(insights)} insights for {hemisphere.value}"
         )
 
         bullets_created = []
@@ -96,7 +96,7 @@ class Curator:
 
             if is_duplicate:
                 logger.debug(
-                    f"  ⊗ Duplicate insight, skipping: {bullet.text[:60]}..."
+                    f"   Duplicate insight, skipping: {bullet.text[:60]}..."
                 )
                 # Instead of creating new, could increment existing
                 # But for now, skip to avoid noise
@@ -138,7 +138,7 @@ class Curator:
                             if assigned:
                                 bullets_created.append(assigned)
                                 logger.info(
-                                    f"  ✓ Auto-assigned bullet: {assigned.id[:12]}... "
+                                    f"  OK Auto-assigned bullet: {assigned.id[:12]}... "
                                     f"to {assigned.side.value}"
                                 )
                             else:
@@ -169,14 +169,14 @@ class Curator:
                     )
                     bullets_created.append(created)
                     logger.info(
-                        f"  ✓ Created bullet: {created.id[:12]}... "
+                        f"  OK Created bullet: {created.id[:12]}... "
                         f"[{bullet.type.value}] {bullet.text[:60]}..."
                     )
             else:
                 bullets_created.append(bullet)
 
         logger.info(
-            f"📚 Curated {len(bullets_created)} new bullets for {hemisphere.value}"
+            f" Curated {len(bullets_created)} new bullets for {hemisphere.value}"
         )
 
         return bullets_created
@@ -198,13 +198,13 @@ class Curator:
         # Filter out low-confidence insights
         if insight.confidence < 0.5:
             logger.debug(
-                f"  ⊗ Skipping low-confidence insight: {insight.confidence:.2f}"
+                f"   Skipping low-confidence insight: {insight.confidence:.2f}"
             )
             return None
 
         # Filter out trivial insights
         if len(insight.text) < 10:
-            logger.debug("  ⊗ Skipping trivial insight (too short)")
+            logger.debug("   Skipping trivial insight (too short)")
             return None
 
         # Map InsightType to BulletType
@@ -406,7 +406,7 @@ class Curator:
             List of bullet IDs that were (or would be) pruned
         """
         logger.info(
-            f"🧹 Pruning {hemisphere.value} memory "
+            f" Pruning {hemisphere.value} memory "
             f"(min_score={min_score}, min_age={min_age_days}d, dry_run={dry_run})"
         )
 
@@ -442,7 +442,7 @@ class Curator:
             List of (kept_id, removed_id) tuples
         """
         logger.info(
-            f"🔗 Deduplicating {hemisphere.value} memory "
+            f" Deduplicating {hemisphere.value} memory "
             f"(threshold={similarity_threshold:.2f}, dry_run={dry_run})"
         )
 
@@ -479,7 +479,7 @@ class Curator:
             List of bullet IDs that were promoted
         """
         logger.info(
-            f"⬆️  Checking for promotable bullets in {hemisphere.value} "
+            f"  Checking for promotable bullets in {hemisphere.value} "
             f"(threshold={promote_threshold})"
         )
 
@@ -500,7 +500,7 @@ class Curator:
                 # But we can record which ones are eligible
                 promoted_ids.append(bullet.id)
                 logger.info(
-                    f"  ⬆️  Eligible for promotion: {bullet.id[:12]}... "
+                    f"    Eligible for promotion: {bullet.id[:12]}... "
                     f"(+{bullet.helpful_count}/-{bullet.harmful_count})"
                 )
 
@@ -523,7 +523,7 @@ class Curator:
             List of bullet IDs that were activated
         """
         logger.info(
-            f"✨ Checking quarantined bullets in {hemisphere.value} "
+            f" Checking quarantined bullets in {hemisphere.value} "
             f"(threshold={activation_threshold})"
         )
 

@@ -1,9 +1,11 @@
 """MCP Client Implementation"""
 import asyncio
 import logging
+import os
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .exceptions import (
@@ -55,6 +57,7 @@ class MCPServer:
     last_connected: Optional[datetime] = None
     connection_attempts: int = 0
     session: Optional[Any] = None
+    tool_timeout: Optional[float] = None
 
 
 @dataclass
@@ -126,6 +129,7 @@ class MCPClient:
                 endpoint=server_config.get("endpoint") or server_config.get("url"),
                 cwd=server_config.get("cwd"),
                 enabled=server_config.get("enabled", True),
+                tool_timeout=server_config.get("tool_timeout"),
             )
 
             self.servers[server.name] = server
@@ -419,12 +423,21 @@ class MCPClient:
                 error="Invalid parameters",
             )
 
+        precheck_error = self._precheck_filesystem_path(tool, parameters)
+        if precheck_error:
+            self.stats["failed_calls"] += 1
+            return MCPToolResult(
+                tool_name=tool_name,
+                success=False,
+                error=precheck_error,
+            )
+
         # Execute tool
-        timeout = timeout or self.tool_timeout
+        timeout = self._resolve_tool_timeout(tool, timeout)
 
         try:
             result = await asyncio.wait_for(
-                self._execute_tool(tool, parameters),
+                self._execute_tool(tool, parameters, timeout),
                 timeout=timeout
             )
 
@@ -469,7 +482,8 @@ class MCPClient:
     async def _execute_tool(
         self,
         tool: MCPTool,
-        parameters: Dict[str, Any]
+        parameters: Dict[str, Any],
+        timeout: float,
     ) -> MCPToolResult:
         """
         Execute tool on MCP server
@@ -502,7 +516,7 @@ class MCPClient:
             result = await server.session.call_tool(
                 tool.name,
                 arguments=parameters,
-                read_timeout_seconds=timedelta(seconds=self.tool_timeout),
+                read_timeout_seconds=timedelta(seconds=timeout),
             )
         except Exception as e:
             return MCPToolResult(
@@ -535,6 +549,87 @@ class MCPClient:
             error="Tool returned error" if result.isError else None,
             metadata={"server": tool.server_name},
         )
+
+    def _resolve_tool_timeout(self, tool: MCPTool, override: Optional[float]) -> float:
+        if override is not None:
+            return override
+        server = self.servers.get(tool.server_name)
+        if server and server.tool_timeout:
+            return server.tool_timeout
+        return self.tool_timeout
+
+    def _precheck_filesystem_path(self, tool: MCPTool, parameters: Dict[str, Any]) -> Optional[str]:
+        if tool.name not in {"read_file", "read_text_file", "read_media_file", "read_multiple_files"}:
+            return None
+        server = self.servers.get(tool.server_name)
+        if not server:
+            return None
+        paths = self._extract_paths(parameters, server)
+        if not paths:
+            return None
+        roots = self._filesystem_allowed_roots(server)
+        for path in paths:
+            if roots and not self._is_path_allowed(path, roots):
+                allowed = ", ".join(str(root) for root in roots)
+                return f"Path not allowed: {path} (allowed: {allowed})"
+            if not path.exists():
+                return f"File not found: {path}"
+        return None
+
+    @staticmethod
+    def _is_path_allowed(path: Path, roots: List[Path]) -> bool:
+        for root in roots:
+            if path.is_relative_to(root):
+                return True
+        return False
+
+    def _filesystem_allowed_roots(self, server: MCPServer) -> List[Path]:
+        args = server.args or []
+        roots: List[str] = []
+        for idx, arg in enumerate(args):
+            if "server-filesystem" in arg:
+                roots = args[idx + 1 :]
+                break
+        if not roots:
+            filtered = [arg for arg in args if not arg.startswith("-")]
+            if filtered:
+                if "server-filesystem" in filtered[0] and len(filtered) > 1:
+                    roots = filtered[1:]
+                elif "server-filesystem" not in filtered[0]:
+                    roots = filtered
+        base = Path(server.cwd or os.getcwd())
+        resolved: List[Path] = []
+        for root in roots:
+            if not root:
+                continue
+            path = Path(root)
+            if not path.is_absolute():
+                path = base / path
+            resolved.append(path.resolve())
+        return resolved
+
+    def _extract_paths(self, parameters: Dict[str, Any], server: MCPServer) -> List[Path]:
+        raw = None
+        if "path" in parameters:
+            raw = parameters.get("path")
+        elif "paths" in parameters:
+            raw = parameters.get("paths")
+        if raw is None:
+            return []
+        if isinstance(raw, (list, tuple)):
+            values = raw
+        else:
+            values = [raw]
+        base = Path(server.cwd or os.getcwd())
+        resolved: List[Path] = []
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            path = Path(value)
+            if not path.is_absolute():
+                path = base / path
+            resolved.append(path.resolve())
+        return resolved
 
     async def list_tools(self) -> List[MCPTool]:
         """Get list of all available tools"""

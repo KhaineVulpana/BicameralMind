@@ -1,14 +1,14 @@
-"""Learning Pipeline: Orchestrates Reflection → Curation → Memory Update.
+"""Learning Pipeline: Orchestrates Reflection -> Curation -> Memory Update.
 
 This is the complete learning cycle:
 
-1. Execute task → Generate trace
+1. Execute task -> Generate trace
 2. Consciousness ticks determine if/how to reflect
-3. Reflector analyzes trace → Extracts insights
-4. Curator converts insights → Creates bullets
+3. Reflector analyzes trace -> Extracts insights
+4. Curator converts insights -> Creates bullets
 5. Bullets added to procedural memory (quarantined)
 6. Outcomes update bullet scores
-7. Successful bullets activate → Promote to shared
+7. Successful bullets activate -> Promote to shared
 
 This module provides a high-level API for the entire learning process.
 """
@@ -129,7 +129,7 @@ class LearningPipeline:
             LearningResult with statistics
         """
         logger.info(
-            f"🎓 Learning from trace {trace.trace_id[:12]}... "
+            f" Learning from trace {trace.trace_id[:12]}... "
             f"(hemisphere={trace.hemisphere}, tick_rate={tick_rate:.2f})"
         )
 
@@ -155,7 +155,7 @@ class LearningPipeline:
         )
 
         if not should_reflect:
-            logger.debug("  ⊘ Skipping reflection (tick rate too low)")
+            logger.debug("   Skipping reflection (tick rate too low)")
             # Still record outcome for bullets that were used
             self._record_trace_outcome(trace, result)
             return result
@@ -168,7 +168,7 @@ class LearningPipeline:
         result.insights_extracted = len(insights)
 
         if not insights:
-            logger.debug("  ⊘ No insights extracted")
+            logger.debug("   No insights extracted")
             self._record_trace_outcome(trace, result)
             return result
 
@@ -187,7 +187,7 @@ class LearningPipeline:
 
         # Log summary
         logger.success(
-            f"✓ Learning complete: {result.insights_extracted} insights → "
+            f"OK Learning complete: {result.insights_extracted} insights -> "
             f"{result.bullets_created} bullets "
             f"(depth={depth}, +{result.bullets_marked_helpful}/-{result.bullets_marked_harmful})"
         )
@@ -234,7 +234,7 @@ class LearningPipeline:
             expected_success=expected_success,
         )
 
-        logger.debug(f"🔍 Calculated tick_rate={tick_rate:.2f} from trace novelty")
+        logger.debug(f" Calculated tick_rate={tick_rate:.2f} from trace novelty")
 
         # Use standard learning pipeline with calculated tick rate
         return await self.learn_from_trace(
@@ -349,7 +349,7 @@ class LearningPipeline:
         Returns:
             Statistics about maintenance operations
         """
-        logger.info(f"🧹 Running maintenance for {hemisphere.value}")
+        logger.info(f" Running maintenance for {hemisphere.value}")
 
         stats = {
             "hemisphere": hemisphere.value,
@@ -386,7 +386,7 @@ class LearningPipeline:
             stats["promoted"] = len(promoted_ids)
 
         logger.success(
-            f"✓ Maintenance complete: "
+            f"OK Maintenance complete: "
             f"pruned={stats['pruned']}, "
             f"deduplicated={stats['deduplicated']}, "
             f"promoted={stats['promoted']}"

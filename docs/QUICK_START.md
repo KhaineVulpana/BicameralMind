@@ -21,7 +21,7 @@ Download from: https://ollama.ai
 
 Pull a model:
 ```bash
-ollama pull qwen2.5:14b
+ollama pull qwen3:14b
 ```
 
 ## Running Examples
@@ -106,7 +106,7 @@ Edit `config/config.yaml`:
 ```yaml
 # Model settings
 model:
-  name: "qwen2.5:14b"  # Your Ollama model
+  name: "qwen3:14b"  # Your Ollama model
   temperature: 0.7
 
 # Procedural memory (ACE-style)
@@ -141,33 +141,33 @@ right_brain:
 
 ```
 BicameralMind/
-├── core/
-│   ├── memory/                    # ✨ NEW: Procedural Memory System
-│   │   ├── __init__.py
-│   │   ├── bullet.py             # Bullet dataclass + enums
-│   │   ├── procedural_store.py   # Low-level Chroma interface
-│   │   ├── procedural_memory.py  # High-level API
-│   │   └── retrieval.py          # Advanced retrieval
-│   ├── left_brain/
-│   │   └── agent.py              # ✅ Updated
-│   ├── right_brain/
-│   │   └── agent.py              # ✅ Updated
-│   ├── meta_controller/
-│   ├── bicameral_mind.py         # ✅ Updated
-│   └── base_agent.py
-├── examples/
-│   ├── procedural_memory_example.py  # ✨ NEW
-│   └── usage.py
-├── docs/
-│   ├── PROCEDURAL_MEMORY_IMPLEMENTATION.md  # ✨ NEW
-│   ├── QUICK_START.md                       # ✨ NEW (this file)
-│   ├── Bicameral_Mind_Handoff.md
-│   └── Bicameral_Mind_Checklist.md
-├── tests/test_procedural_memory.py     # ✨ NEW
-├── main.py
-├── requirements.txt
-└── config/
-    └── config.yaml
+ core/
+    memory/                    #  NEW: Procedural Memory System
+       __init__.py
+       bullet.py             # Bullet dataclass + enums
+       procedural_store.py   # Low-level Chroma interface
+       procedural_memory.py  # High-level API
+       retrieval.py          # Advanced retrieval
+    left_brain/
+       agent.py              #  Updated
+    right_brain/
+       agent.py              #  Updated
+    meta_controller/
+    bicameral_mind.py         #  Updated
+    base_agent.py
+ examples/
+    procedural_memory_example.py  #  NEW
+    usage.py
+ docs/
+    PROCEDURAL_MEMORY_IMPLEMENTATION.md  #  NEW
+    QUICK_START.md                       #  NEW (this file)
+    Bicameral_Mind_Handoff.md
+    Bicameral_Mind_Checklist.md
+ tests/test_procedural_memory.py     #  NEW
+ main.py
+ requirements.txt
+ config/
+     config.yaml
 ```
 
 ## Key Concepts
@@ -185,17 +185,17 @@ BicameralMind/
 
 ### 3. Outcome-Based Learning
 Bullets are scored based on **actual outcomes**, NOT time or ticks:
-- ✅ Tool succeeded → `helpful=True`
-- ❌ Tool failed → `helpful=False`
-- ✅ Test passed → `helpful=True`
-- ❌ Test failed → `helpful=False`
+-  Tool succeeded -> `helpful=True`
+-  Tool failed -> `helpful=False`
+-  Test passed -> `helpful=True`
+-  Test failed -> `helpful=False`
 
 ### 4. Automatic Lifecycle
 ```
 NEW BULLET (quarantined)
-    ↓ (helpful_count >= 2, harmful_count == 0)
+     (helpful_count >= 2, harmful_count == 0)
 ACTIVE
-    ↓ (helpful_count >= 3, harmful_count == 0)
+     (helpful_count >= 3, harmful_count == 0)
 PROMOTED TO SHARED
 ```
 
@@ -224,11 +224,11 @@ Then restart your script.
 ### Type Errors
 Make sure you're using the enums:
 ```python
-# ✅ Correct
+#  Correct
 side=Hemisphere.LEFT
 bullet_type=BulletType.HEURISTIC
 
-# ❌ Wrong
+#  Wrong
 side="left"  # Use enum!
 bullet_type="heuristic"  # Use enum!
 ```
@@ -250,16 +250,16 @@ bullet_type="heuristic"  # Use enum!
 
 ---
 
-**Status:** ✅ Phase 1 Complete
+**Status:**  Phase 1 Complete
 
 **What Works:**
-- ✅ Bullet-based storage
-- ✅ Three-collection architecture
-- ✅ Outcome-based learning
-- ✅ Automatic promotion
-- ✅ Per-hemisphere retrieval
-- ✅ Advanced retrieval patterns
-- ✅ Integration with agents
+-  Bullet-based storage
+-  Three-collection architecture
+-  Outcome-based learning
+-  Automatic promotion
+-  Per-hemisphere retrieval
+-  Advanced retrieval patterns
+-  Integration with agents
 
 **Coming in Phase 2:**
 - Reflection module

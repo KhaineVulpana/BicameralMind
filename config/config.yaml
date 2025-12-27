@@ -1,5 +1,5 @@
 model:
-  name: "llama3:8b"  # adjusted for local hardware  # Change to your preferred Ollama model
+  name: qwen3:14b  # adjusted for local hardware  # Change to your preferred Ollama model
   temperature: 0.7
   max_tokens: 2048
 
@@ -102,6 +102,7 @@ mcp:
       type: "stdio"
       command: "npx"
       args: ["-y", "@modelcontextprotocol/server-filesystem", "./data"]
+      tool_timeout: 30
       enabled: true
       description: "Read/write files and directories"
       category: "filesystem"

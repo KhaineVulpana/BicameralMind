@@ -381,12 +381,15 @@ class Pruner:
         restored_count = 0
         for bullet_data in bullets_data:
             bullet = Bullet.from_dict(bullet_data)
-
-            self.store.add(
-                collection_name=collection_name,
+            side = collection_name.replace("procedural_", "")
+            if side not in self.store._collections:
+                raise ValueError(f"Unknown collection: {collection_name}")
+            embedding = self.store._embed([bullet.text])[0]
+            self.store._collections[side].upsert(
                 ids=[bullet.id],
                 documents=[bullet.text],
-                metadatas=[bullet.to_metadata()]
+                embeddings=[embedding],
+                metadatas=[bullet.to_metadata()],
             )
             restored_count += 1
 
