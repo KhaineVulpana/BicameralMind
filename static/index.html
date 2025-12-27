@@ -324,6 +324,14 @@
                                     </select>
                                 </label>
                                 <label>
+                                    Model (Slow)
+                                    <select id="model-slow"></select>
+                                </label>
+                                <label>
+                                    Model (Fast)
+                                    <select id="model-fast"></select>
+                                </label>
+                                <label>
                                     Temperature
                                     <input id="chat-temp" type="number" min="0" max="1" step="0.1" value="0.7">
                                 </label>
@@ -487,30 +495,23 @@
                         <div class="metric-row">
                             <div class="metric-card">
                                 <span class="metric-label">Most Used</span>
-                                <span class="metric-value">read_file</span>
-                                <span class="metric-meta">47 calls</span>
+                                <span id="tools-most-used" class="metric-value">-</span>
+                                <span id="tools-most-used-meta" class="metric-meta">-</span>
                             </div>
                             <div class="metric-card">
                                 <span class="metric-label">Highest Success</span>
-                                <span class="metric-value">98%</span>
-                                <span class="metric-meta">write_file</span>
+                                <span id="tools-highest-success" class="metric-value">-</span>
+                                <span id="tools-highest-success-meta" class="metric-meta">-</span>
                             </div>
                             <div class="metric-card">
                                 <span class="metric-label">Most Learning</span>
-                                <span class="metric-value">12</span>
-                                <span class="metric-meta">search_repos</span>
+                                <span id="tools-most-learning" class="metric-value">-</span>
+                                <span id="tools-most-learning-meta" class="metric-meta">-</span>
                             </div>
                         </div>
                         <div class="mini-chart">
                             <div class="chart-header">Success Rate Timeline</div>
-                            <div class="bar-chart">
-                                <span style="height: 60%"></span>
-                                <span style="height: 48%"></span>
-                                <span style="height: 72%"></span>
-                                <span style="height: 66%"></span>
-                                <span style="height: 80%"></span>
-                                <span style="height: 58%"></span>
-                            </div>
+                            <div id="tools-success-timeline" class="bar-chart"></div>
                         </div>
                     </div>
 
@@ -518,15 +519,10 @@
                         <div class="panel-header">
                             <div>
                                 <h2>Tool Flow</h2>
-                                <p class="panel-subtitle">Visual execution chains (placeholder).</p>
+                                <p class="panel-subtitle">Recent execution chain.</p>
                             </div>
                         </div>
-                        <div class="flow-placeholder">
-                            <div class="flow-node">User</div>
-                            <div class="flow-node">Planner</div>
-                            <div class="flow-node">Tool</div>
-                            <div class="flow-node">Result</div>
-                        </div>
+                        <div id="tools-flow" class="flow-placeholder"></div>
                     </div>
 
                     <div class="panel mcp-config">

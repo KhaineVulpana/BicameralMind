@@ -165,7 +165,7 @@ class BulletMerger:
             id=primary.id,
             text=primary.text,
             side=primary.side,
-            bullet_type=primary.bullet_type,
+            type=primary.type,
             tags=list(primary.tags),
             confidence=primary.confidence,
             helpful_count=primary.helpful_count,

@@ -2,7 +2,9 @@
 import webbrowser
 import asyncio
 import json
+import subprocess
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -224,6 +226,45 @@ class EpisodeRequest(BaseModel):
     data: dict
 
 
+def _list_ollama_models() -> list[dict]:
+    """Return models available in the local Ollama instance."""
+    try:
+        proc = subprocess.run(
+            ["ollama", "list"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:
+        return [{"name": "", "error": str(exc)}]
+
+    if proc.returncode != 0:
+        err = (proc.stderr or proc.stdout or "").strip()
+        return [{"name": "", "error": err or f"ollama list failed (code={proc.returncode})"}]
+
+    lines = [ln.rstrip() for ln in (proc.stdout or "").splitlines() if ln.strip()]
+    if len(lines) <= 1:
+        return []
+
+    out: list[dict] = []
+    for ln in lines[1:]:
+        parts = ln.split()
+        if not parts:
+            continue
+        name = parts[0]
+        model_id = parts[1] if len(parts) >= 2 else ""
+        size = ""
+        modified = ""
+        if len(parts) >= 4:
+            size = f"{parts[2]} {parts[3]}"
+            modified = " ".join(parts[4:]) if len(parts) > 4 else ""
+        elif len(parts) >= 3:
+            size = parts[2]
+        out.append({"name": name, "id": model_id, "size": size, "modified": modified})
+
+    return out
+
+
 def _try_parse_chat_tool_command(text: str) -> Optional[dict]:
     """Parse simple slash commands for tool usage.
 
@@ -309,7 +350,7 @@ async def get_status():
                 "shared": memory_shared,
                 "staging": memory_staging
             },
-            "model": bicameral_mind.config.get("model", {}).get("name", "unknown"),
+            "model": ((bicameral_mind.config.get("model", {}) or {}).get("slow") or (bicameral_mind.config.get("model", {}) or {})).get("name", "unknown"),
             "health": "OK"
         }
     except Exception as e:
@@ -730,15 +771,25 @@ async def send_message(message: ChatMessage):
         response_payload = response if isinstance(response, dict) else {}
         details = {}
         if response_payload:
-            for key in ("mode", "hemisphere", "left", "right", "rag_context"):
+            for key in ("mode", "hemisphere", "left", "right", "rag_context", "retrieved_bullets"):
                 if key in response_payload:
                     details[key] = response_payload.get(key)
+
+        bullets_used = 0
+        retrieved = details.get("retrieved_bullets")
+        if isinstance(retrieved, list):
+            bullets_used = len(retrieved)
+        elif isinstance(response_payload, dict):
+            if isinstance(response_payload.get("bullets_count"), int):
+                bullets_used = int(response_payload.get("bullets_count") or 0)
+            elif isinstance(response_payload.get("bullets_used"), list):
+                bullets_used = len(response_payload.get("bullets_used") or [])
         return {
             "response": response_payload.get("output", response),
             "mode": bicameral_mind.meta_controller.mode.value,
             "tick_rate": bicameral_mind.meta_controller.get_tick_rate(),
             "hemisphere": response_payload.get("hemisphere", bicameral_mind.meta_controller.get_active_hemisphere()),
-            "bullets_used": 0,
+            "bullets_used": bullets_used,
             "details": details,
         }
     except Exception as e:
@@ -795,6 +846,136 @@ async def search_tools(q: str, k: int = 5, provider: Optional[str] = None):
             }
             for r in results
         ]
+    }
+
+
+@app.get("/api/tools/stats")
+async def get_tool_stats(window_minutes: int = 60, buckets: int = 12, recent: int = 20):
+    """Return tool usage analytics based on ToolExecutor execution history."""
+    if not tool_executor:
+        return {
+            "stats": {"total_executions": 0, "success_rate": 0.0},
+            "per_tool": [],
+            "timeline": [],
+            "recent": [],
+        }
+
+    history = list(getattr(tool_executor, "execution_history", []) or [])
+    base_stats = tool_executor.get_stats() if hasattr(tool_executor, "get_stats") else {"total_executions": len(history)}
+
+    # Per-tool rollups
+    per_tool: dict[str, dict] = {}
+    for record in history:
+        tool_name = getattr(getattr(record, "context", None), "tool_name", "") or ""
+        if not tool_name:
+            continue
+        tool_stats = per_tool.setdefault(
+            tool_name,
+            {
+                "name": tool_name,
+                "total": 0,
+                "success": 0,
+                "failed": 0,
+                "total_ms": 0.0,
+                "last_used": None,
+            },
+        )
+        tool_stats["total"] += 1
+        ok = bool(getattr(getattr(record, "result", None), "success", False))
+        if ok:
+            tool_stats["success"] += 1
+        else:
+            tool_stats["failed"] += 1
+
+        exec_time = float(getattr(getattr(record, "result", None), "execution_time", 0.0) or 0.0)
+        tool_stats["total_ms"] += exec_time * 1000.0
+        ts = getattr(record, "timestamp", None)
+        if ts and (tool_stats["last_used"] is None or ts > tool_stats["last_used"]):
+            tool_stats["last_used"] = ts
+
+    per_tool_list = []
+    for tool_name, row in per_tool.items():
+        total = int(row.get("total") or 0)
+        success = int(row.get("success") or 0)
+        failed = int(row.get("failed") or 0)
+        avg_ms = (float(row.get("total_ms") or 0.0) / total) if total else 0.0
+        last_used = row.get("last_used")
+        per_tool_list.append(
+            {
+                "name": tool_name,
+                "total": total,
+                "success": success,
+                "failed": failed,
+                "success_rate": (success / total) if total else 0.0,
+                "avg_duration_ms": avg_ms,
+                "last_used": last_used.isoformat() if isinstance(last_used, datetime) else None,
+            }
+        )
+
+    per_tool_list.sort(key=lambda r: r.get("total", 0), reverse=True)
+
+    # Recent executions
+    recent_records = sorted(history, key=lambda r: getattr(r, "timestamp", datetime.min), reverse=True)[: max(0, int(recent))]
+    recent_payload = []
+    for record in recent_records:
+        result = getattr(record, "result", None)
+        context = getattr(record, "context", None)
+        ts = getattr(record, "timestamp", None)
+        recent_payload.append(
+            {
+                "tool": getattr(context, "tool_name", ""),
+                "hemisphere": getattr(context, "hemisphere", ""),
+                "success": bool(getattr(result, "success", False)),
+                "duration_ms": int(float(getattr(result, "execution_time", 0.0) or 0.0) * 1000),
+                "error": getattr(result, "error", None),
+                "timestamp": ts.isoformat() if isinstance(ts, datetime) else None,
+            }
+        )
+
+    # Timeline buckets within a window
+    timeline = []
+    try:
+        window_minutes = max(1, int(window_minutes))
+        buckets = max(1, int(buckets))
+    except Exception:
+        window_minutes = 60
+        buckets = 12
+
+    now = datetime.utcnow()
+    start = now - timedelta(minutes=window_minutes)
+    bucket_seconds = (window_minutes * 60.0) / float(buckets)
+    counts = [{"total": 0, "success": 0} for _ in range(buckets)]
+    for record in history:
+        ts = getattr(record, "timestamp", None)
+        if not isinstance(ts, datetime):
+            continue
+        if ts < start or ts > now:
+            continue
+        delta = (ts - start).total_seconds()
+        idx = int(delta // bucket_seconds) if bucket_seconds > 0 else 0
+        idx = min(max(idx, 0), buckets - 1)
+        counts[idx]["total"] += 1
+        if bool(getattr(getattr(record, "result", None), "success", False)):
+            counts[idx]["success"] += 1
+
+    for i in range(buckets):
+        bucket_start = start + timedelta(seconds=bucket_seconds * i)
+        total = counts[i]["total"]
+        success = counts[i]["success"]
+        timeline.append(
+            {
+                "start": bucket_start.isoformat(),
+                "total": total,
+                "success": success,
+                "success_rate": (success / total) if total else 0.0,
+            }
+        )
+
+    return {
+        "stats": base_stats,
+        "per_tool": per_tool_list,
+        "timeline": timeline,
+        "recent": recent_payload,
     }
 
 
@@ -887,6 +1068,24 @@ async def get_mcp_servers():
 
         servers = config.get('mcp', {}).get('servers', [])
 
+        # Count MCP tools per server (if tool registry loaded)
+        tool_counts: dict[str, int] = {}
+        if tool_registry:
+            try:
+                tools_all = tool_registry.list_tools(enabled_only=False)
+                for tool in tools_all:
+                    provider = getattr(getattr(tool, "provider", None), "value", getattr(tool, "provider", ""))
+                    if str(provider) != "mcp":
+                        continue
+                    if not bool(getattr(tool, "enabled", True)):
+                        continue
+                    cfg = getattr(tool, "config", None) or {}
+                    server_name = cfg.get("server") if isinstance(cfg, dict) else ""
+                    if server_name:
+                        tool_counts[server_name] = tool_counts.get(server_name, 0) + 1
+            except Exception:
+                tool_counts = {}
+
         # Format for UI
         result = []
         for server in servers:
@@ -894,7 +1093,7 @@ async def get_mcp_servers():
                 "name": server['name'],
                 "status": "connected" if server.get('enabled') else "disabled",
                 "enabled": bool(server.get('enabled')),
-                "tools": 0,  # TODO: Get actual tool count
+                "tools": tool_counts.get(server.get("name", ""), 0),
                 "description": server.get('description', ''),
                 "category": server.get('category', 'other')
             })
@@ -1058,6 +1257,80 @@ async def update_mcp_config(config_update: dict):
         import traceback
         traceback.print_exc()
         return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/models/ollama")
+async def list_ollama_models():
+    """List locally available Ollama models."""
+    return {"models": _list_ollama_models()}
+
+
+@app.get("/api/models/active")
+async def get_active_models():
+    """Return currently active model configuration."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    config = load_config(str(config_file)) if load_config else {}
+    model_cfg = (config.get("model", {}) or {})
+
+    slow_cfg = model_cfg.get("slow") or model_cfg
+    fast_cfg = model_cfg.get("fast") or {}
+    return {
+        "slow": (slow_cfg or {}).get("name", ""),
+        "fast": (fast_cfg or {}).get("name", ""),
+    }
+
+
+class ActiveModelUpdate(BaseModel):
+    slow: str
+    fast: Optional[str] = None
+
+
+@app.post("/api/models/active")
+async def set_active_models(update: ActiveModelUpdate):
+    """Set active model(s), persist config, and update runtime if possible."""
+    slow = (update.slow or "").strip()
+    fast = (update.fast or "").strip() if update.fast is not None else ""
+
+    if not slow:
+        return {"error": "slow_required"}
+
+    available = {m.get("name") for m in _list_ollama_models() if m.get("name")}
+    if available and slow not in available:
+        return {"error": "slow_not_available", "available": sorted(available)}
+    if fast and available and fast not in available:
+        return {"error": "fast_not_available", "available": sorted(available)}
+
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    config = load_config(str(config_file)) if load_config else {}
+    config.setdefault("model", {})
+
+    # Promote legacy model config to model.slow for consistency.
+    if isinstance(config["model"], dict) and "slow" not in config["model"] and "name" in config["model"]:
+        config["model"] = {"slow": dict(config["model"])}
+
+    model_cfg = config.get("model", {}) or {}
+    slow_cfg = model_cfg.get("slow") or {}
+    slow_cfg["name"] = slow
+    model_cfg["slow"] = slow_cfg
+
+    if fast:
+        fast_cfg = model_cfg.get("fast") or {}
+        fast_cfg["name"] = fast
+        model_cfg["fast"] = fast_cfg
+    else:
+        model_cfg.pop("fast", None)
+
+    config["model"] = model_cfg
+    if save_config:
+        save_config(config, str(config_file))
+
+    if bicameral_mind and hasattr(bicameral_mind, "set_models"):
+        try:
+            bicameral_mind.set_models(slow, fast_name=fast or None)
+        except Exception as exc:
+            return {"error": "runtime_update_failed", "message": str(exc)}
+
+    return {"status": "success", "slow": slow, "fast": fast}
 
 
 @app.websocket("/ws")

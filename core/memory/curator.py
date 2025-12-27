@@ -17,6 +17,7 @@ Following ACE principles:
 - Prune based on persistent poor performance
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from loguru import logger
 
@@ -410,20 +411,60 @@ class Curator:
             f"(min_score={min_score}, min_age={min_age_days}d, dry_run={dry_run})"
         )
 
-        # TODO: Implement actual pruning logic
-        # For now, this is a stub
+        if not self.memory or not getattr(self.memory, "enabled", False):
+            return []
 
-        pruned_ids = []
+        try:
+            min_age_days = max(0, int(min_age_days))
+        except Exception:
+            min_age_days = 7
 
-        # Would need to:
-        # 1. Retrieve all bullets from hemisphere
-        # 2. Filter by age and score
-        # 3. Mark as DEPRECATED
-        # 4. Optionally delete
+        cutoff = datetime.now(timezone.utc) - timedelta(days=min_age_days)
 
-        logger.warning("Pruning not fully implemented yet")
+        try:
+            raw = self.memory.store.list_bullets(
+                side=hemisphere.value,
+                limit=10000,
+                include_deprecated=True,
+            )
+        except Exception as exc:
+            logger.warning(f"Prune list_bullets failed: {exc}")
+            return []
 
-        return pruned_ids
+        candidates: List[str] = []
+        for pb in raw:
+            bullet = self.memory._convert_bullet(pb)
+            if str(getattr(bullet.status, "value", bullet.status)) == BulletStatus.DEPRECATED.value:
+                continue
+
+            created_at = bullet.created_at
+            if isinstance(created_at, datetime):
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                else:
+                    created_at = created_at.astimezone(timezone.utc)
+            else:
+                created_at = datetime.now(timezone.utc)
+
+            if created_at > cutoff:
+                continue
+
+            try:
+                score = float(bullet.score())
+            except Exception:
+                score = 0.0
+
+            if score < float(min_score):
+                candidates.append(bullet.id)
+
+        if dry_run:
+            return candidates
+
+        pruned: List[str] = []
+        for bid in candidates:
+            if self.memory.store.set_status(bid, BulletStatus.DEPRECATED.value):
+                pruned.append(bid)
+        return pruned
 
     async def deduplicate(
         self,
@@ -446,20 +487,74 @@ class Curator:
             f"(threshold={similarity_threshold:.2f}, dry_run={dry_run})"
         )
 
-        # TODO: Implement actual deduplication logic
-        # For now, this is a stub
+        if not self.memory or not getattr(self.memory, "enabled", False):
+            return []
 
-        merged_pairs = []
+        collection = f"procedural_{hemisphere.value}"
 
-        # Would need to:
-        # 1. Retrieve all bullets
-        # 2. Compute pairwise similarities
-        # 3. Merge duplicates (keep higher score, transfer counts)
-        # 4. Delete or deprecate duplicates
+        # Prefer semantic dedup if deps are available
+        try:
+            from .deduplicator import Deduplicator
+            from .bullet_merger import BulletMerger
 
-        logger.warning("Deduplication not fully implemented yet")
+            deduper = Deduplicator(self.memory.store, config={"dedup_threshold": float(similarity_threshold)})
+            clusters = deduper.find_duplicates(collection_name=collection, threshold=float(similarity_threshold))
+            if not clusters:
+                return []
 
-        return merged_pairs
+            pairs: List[Tuple[str, str]] = []
+            for cluster in clusters:
+                primary = getattr(cluster, "primary_bullet", None)
+                if not primary:
+                    continue
+                for b in getattr(cluster, "bullets", []) or []:
+                    if b.id != primary.id:
+                        pairs.append((primary.id, b.id))
+
+            if dry_run:
+                return pairs
+
+            merger = BulletMerger(self.memory.store)
+            out: List[Tuple[str, str]] = []
+            for cluster in clusters:
+                res = merger.merge_cluster(cluster, collection_name=collection)
+                for removed_id in res.archived_ids or []:
+                    out.append((res.merged_bullet.id, removed_id))
+            return out
+        except Exception as exc:
+            logger.warning(f"Semantic dedup unavailable, using exact-text dedup ({exc})")
+
+        try:
+            raw = self.memory.store.list_bullets(side=hemisphere.value, limit=10000, include_deprecated=True)
+        except Exception as exc:
+            logger.warning(f"Dedup list_bullets failed: {exc}")
+            return []
+
+        bullets = [self.memory._convert_bullet(pb) for pb in raw]
+        by_text: Dict[str, List[Bullet]] = {}
+        for b in bullets:
+            norm = " ".join((b.text or "").strip().lower().split())
+            if not norm:
+                continue
+            by_text.setdefault(norm, []).append(b)
+
+        pairs: List[Tuple[str, str]] = []
+        for _, group in by_text.items():
+            if len(group) < 2:
+                continue
+            group.sort(key=lambda b: float(b.score()), reverse=True)
+            keep = group[0]
+            for dup in group[1:]:
+                pairs.append((keep.id, dup.id))
+
+        if dry_run:
+            return pairs
+
+        out: List[Tuple[str, str]] = []
+        for keep_id, dup_id in pairs:
+            if self.memory.store.set_status(dup_id, BulletStatus.DEPRECATED.value):
+                out.append((keep_id, dup_id))
+        return out
 
     async def promote_successful_bullets(
         self,

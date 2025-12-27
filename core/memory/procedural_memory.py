@@ -7,6 +7,7 @@ This wraps the lower-level ProceduralMemoryStore and provides:
 - Integration with consciousness ticks (gating, not scoring)
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple, Any
 from loguru import logger
 
@@ -404,8 +405,54 @@ class ProceduralMemory:
         min_age_days: int = 7,
     ) -> int:
         """Prune bullets with persistently low scores."""
-        logger.warning("Pruning not yet implemented")
-        return 0
+        if not self.enabled:
+            return 0
+
+        try:
+            min_age_days = max(0, int(min_age_days))
+        except Exception:
+            min_age_days = 7
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=min_age_days)
+
+        try:
+            raw = self.store.list_bullets(side=side.value, limit=10000, include_deprecated=True)
+        except Exception as exc:
+            logger.warning(f"Prune list_bullets failed: {exc}")
+            return 0
+
+        pruned = 0
+        for pb in raw:
+            bullet = self._convert_bullet(pb)
+            if str(getattr(bullet.status, "value", bullet.status)) == BulletStatus.DEPRECATED.value:
+                continue
+
+            created_at = bullet.created_at
+            if isinstance(created_at, datetime):
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                else:
+                    created_at = created_at.astimezone(timezone.utc)
+            else:
+                created_at = datetime.now(timezone.utc)
+
+            if created_at > cutoff:
+                continue
+
+            try:
+                score = float(bullet.score())
+            except Exception:
+                score = 0.0
+
+            if score >= float(min_score):
+                continue
+
+            if self.store.set_status(bullet.id, BulletStatus.DEPRECATED.value):
+                pruned += 1
+
+        if pruned:
+            logger.info(f"Pruned {pruned} bullets from {side.value} (deprecated)")
+        return pruned
 
     def deduplicate(
         self,
@@ -413,5 +460,53 @@ class ProceduralMemory:
         similarity_threshold: float = 0.95,
     ) -> int:
         """Remove near-duplicate bullets."""
-        logger.warning("Deduplication not yet implemented")
-        return 0
+        if not self.enabled:
+            return 0
+
+        collection = f"procedural_{side.value}"
+
+        # Prefer semantic dedup if dependencies are available; otherwise fallback to exact-text dedup.
+        try:
+            from .deduplicator import Deduplicator
+            from .bullet_merger import BulletMerger
+
+            deduper = Deduplicator(self.store, config={"dedup_threshold": float(similarity_threshold)})
+            clusters = deduper.find_duplicates(collection_name=collection, threshold=float(similarity_threshold))
+            if not clusters:
+                return 0
+
+            merger = BulletMerger(self.store)
+            merged_count = 0
+            for cluster in clusters:
+                res = merger.merge_cluster(cluster, collection_name=collection)
+                merged_count += len(res.archived_ids or [])
+            return merged_count
+        except Exception as exc:
+            logger.warning(f"Semantic dedup unavailable, using exact-text dedup ({exc})")
+
+        try:
+            raw = self.store.list_bullets(side=side.value, limit=10000, include_deprecated=True)
+        except Exception as exc:
+            logger.warning(f"Dedup list_bullets failed: {exc}")
+            return 0
+
+        bullets = [self._convert_bullet(pb) for pb in raw]
+        by_text: Dict[str, List[Bullet]] = {}
+        for b in bullets:
+            norm = " ".join((b.text or "").strip().lower().split())
+            if not norm:
+                continue
+            by_text.setdefault(norm, []).append(b)
+
+        removed = 0
+        for norm, group in by_text.items():
+            if len(group) < 2:
+                continue
+            group.sort(key=lambda b: float(b.score()), reverse=True)
+            keep = group[0]
+            for dup in group[1:]:
+                if str(getattr(dup.status, "value", dup.status)) == BulletStatus.DEPRECATED.value:
+                    continue
+                if self.store.set_status(dup.id, BulletStatus.DEPRECATED.value):
+                    removed += 1
+        return removed

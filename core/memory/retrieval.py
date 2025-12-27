@@ -7,6 +7,7 @@ Provides specialized retrievers for different use cases:
 - Multi-query fusion
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple, Dict, Any
 from loguru import logger
 
@@ -260,10 +261,41 @@ class MemoryRetriever:
 
         Note: This doesn't use semantic search, just recency.
         """
-        # TODO: Implement time-based retrieval
-        # For now, return empty list
-        logger.warning("Time-based retrieval not yet implemented")
-        return []
+        if not self.memory or not getattr(self.memory, "enabled", False):
+            return []
+
+        now = datetime.now(timezone.utc)
+        try:
+            min_age = max(0, int(min_age_hours))
+            max_age = max(min_age, int(max_age_hours))
+        except Exception:
+            min_age, max_age = 0, 24
+
+        newest = now - timedelta(hours=min_age)
+        oldest = now - timedelta(hours=max_age)
+
+        try:
+            raw = self.memory.store.list_bullets(side=side.value, limit=5000, include_deprecated=False)
+        except Exception as exc:
+            logger.warning(f"Failed to list bullets for recent retrieval: {exc}")
+            return []
+
+        bullets: List[Bullet] = [self.memory._convert_bullet(b) for b in raw]  # type: ignore[attr-defined]
+
+        def _as_utc(value: datetime) -> datetime:
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+
+        def _ref_time(b: Bullet) -> datetime:
+            t = b.last_used_at or b.created_at
+            if isinstance(t, datetime):
+                return _as_utc(t)
+            return now
+
+        filtered = [b for b in bullets if oldest <= _ref_time(b) <= newest]
+        filtered.sort(key=_ref_time, reverse=True)
+        return filtered[: max(0, int(k))]
 
     def retrieve_controversial(
         self,
@@ -274,7 +306,26 @@ class MemoryRetriever:
 
         These are candidates for review/refinement.
         """
-        # TODO: Implement controversy detection
-        # For now, return empty list
-        logger.warning("Controversial bullet detection not yet implemented")
-        return []
+        if not self.memory or not getattr(self.memory, "enabled", False):
+            return []
+
+        try:
+            raw = self.memory.store.list_bullets(side=side.value, limit=5000, include_deprecated=False)
+        except Exception as exc:
+            logger.warning(f"Failed to list bullets for controversial retrieval: {exc}")
+            return []
+
+        bullets: List[Bullet] = [self.memory._convert_bullet(b) for b in raw]  # type: ignore[attr-defined]
+        candidates = [b for b in bullets if (b.helpful_count or 0) > 0 and (b.harmful_count or 0) > 0]
+
+        def _controversy_score(b: Bullet) -> float:
+            helpful = float(b.helpful_count or 0)
+            harmful = float(b.harmful_count or 0)
+            total = helpful + harmful
+            if total <= 0:
+                return 0.0
+            balance = 1.0 - abs((helpful / total) - 0.5) * 2.0  # 1.0 when balanced, 0.0 when skewed
+            return balance * (total ** 0.5) * float(getattr(b, "confidence", 0.5) or 0.5)
+
+        candidates.sort(key=_controversy_score, reverse=True)
+        return candidates[: max(0, int(k))]

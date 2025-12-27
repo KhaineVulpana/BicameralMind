@@ -1,6 +1,7 @@
 """Bicameral Mind: Main Orchestrator"""
 import asyncio
 from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
 import yaml
 from loguru import logger
 
@@ -100,6 +101,57 @@ class BicameralMind:
         self.conversation_history = []
         
         logger.info(" Bicameral Mind initialized")
+
+    def set_models(self, slow_name: str, *, fast_name: Optional[str] = None) -> None:
+        """Update active Ollama model(s) at runtime.
+
+        This recreates LLM clients and rebinds them into dependent components.
+        """
+        slow_name = (slow_name or "").strip()
+        fast_name = (fast_name or "").strip() if fast_name is not None else ""
+        if not slow_name:
+            raise ValueError("slow_name is required")
+
+        model_cfg = (self.config.get("model", {}) or {})
+        slow_cfg = model_cfg.get("slow") or model_cfg
+        fast_cfg = model_cfg.get("fast") or {}
+
+        # Persist config structure in-memory (api endpoint handles file persistence).
+        model_cfg = dict(model_cfg)
+        model_cfg["slow"] = dict(slow_cfg or {})
+        model_cfg["slow"]["name"] = slow_name
+        if fast_name:
+            model_cfg["fast"] = dict(fast_cfg or {})
+            model_cfg["fast"]["name"] = fast_name
+        else:
+            model_cfg.pop("fast", None)
+        self.config["model"] = model_cfg
+
+        def _pick(cfg: Dict[str, Any]) -> Dict[str, Any]:
+            out: Dict[str, Any] = {}
+            for key in ("name", "temperature", "base_url", "max_tokens"):
+                if key in cfg:
+                    out[key] = cfg[key]
+            return out
+
+        slow_model_cfg = _pick(model_cfg.get("slow") or {})
+        fast_model_cfg = dict(slow_model_cfg)
+        fast_model_cfg.update(_pick(model_cfg.get("fast") or {}))
+
+        self.llm = LLMClient({"model": slow_model_cfg})
+        self.llm_fast = LLMClient({"model": fast_model_cfg})
+
+        # Rebind into brains
+        if getattr(self, "left_brain", None):
+            self.left_brain.llm = self.llm
+        if getattr(self, "right_brain", None):
+            self.right_brain.llm = self.llm
+
+        # Rebind into RAG
+        if getattr(self, "rag", None):
+            self.rag.llm = self.llm
+            self.rag.llm_slow = self.llm
+            self.rag.llm_fast = self.llm_fast
     
     async def start(self):
         """Start the bicameral mind system"""
@@ -194,6 +246,46 @@ class BicameralMind:
 
         if isinstance(result, dict):
             result.setdefault("rag_context", rag_context)
+
+            used_ids: List[str] = []
+            if "bullets_used" in result and isinstance(result.get("bullets_used"), list):
+                used_ids = [str(x) for x in (result.get("bullets_used") or []) if x]
+            elif isinstance(result.get("bullets"), dict):
+                all_ids = result.get("bullets", {}).get("all", [])
+                if isinstance(all_ids, list):
+                    used_ids = [str(x) for x in all_ids if x]
+
+            if self.memory and getattr(self.memory, "enabled", False) and used_ids:
+                try:
+                    bullets = self.memory.get_bullets_by_ids(used_ids)
+                    serialized = []
+                    for b in bullets:
+                        created_at = b.created_at
+                        if isinstance(created_at, datetime) and created_at.tzinfo is not None:
+                            created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+                        last_used_at = b.last_used_at
+                        if isinstance(last_used_at, datetime) and last_used_at.tzinfo is not None:
+                            last_used_at = last_used_at.astimezone(timezone.utc).replace(tzinfo=None)
+                        serialized.append(
+                            {
+                                "id": b.id,
+                                "text": b.text,
+                                "side": b.side.value if hasattr(b.side, "value") else str(b.side),
+                                "type": b.type.value if hasattr(b.type, "value") else str(b.type),
+                                "status": b.status.value if hasattr(b.status, "value") else str(b.status),
+                                "tags": list(b.tags or []),
+                                "confidence": float(getattr(b, "confidence", 0.5) or 0.5),
+                                "helpful_count": int(getattr(b, "helpful_count", 0) or 0),
+                                "harmful_count": int(getattr(b, "harmful_count", 0) or 0),
+                                "score": float(b.score()) if hasattr(b, "score") else 0.0,
+                                "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
+                                "last_used_at": last_used_at.isoformat() if isinstance(last_used_at, datetime) else "",
+                            }
+                        )
+                    serialized.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+                    result["retrieved_bullets"] = serialized
+                except Exception as exc:
+                    logger.debug(f"Failed to serialize retrieved bullets: {exc}")
         
         # Add to history
         self.conversation_history.append({
@@ -229,7 +321,9 @@ class BicameralMind:
             "output": response.content,
             "hemisphere": "left",
             "mode": "exploit",
-            "confidence": response.metadata.get("state", {}).get("confidence", 0.0)
+            "confidence": response.metadata.get("state", {}).get("confidence", 0.0),
+            "bullets_used": list(response.metadata.get("bullets_used") or []),
+            "bullets_count": int(response.metadata.get("bullets_count") or 0),
         }
     
     async def _process_explore(self, content: Dict) -> Dict[str, Any]:
@@ -249,7 +343,9 @@ class BicameralMind:
             "output": response.content,
             "hemisphere": "right",
             "mode": "explore",
-            "novelty": response.metadata.get("state", {}).get("entropy", 0.0)
+            "novelty": response.metadata.get("state", {}).get("entropy", 0.0),
+            "bullets_used": list(response.metadata.get("bullets_used") or []),
+            "bullets_count": int(response.metadata.get("bullets_count") or 0),
         }
     
     async def _process_integrate(self, content: Dict) -> Dict[str, Any]:
@@ -277,12 +373,24 @@ class BicameralMind:
         # Integrate responses
         integrated = await self._integrate_responses(left_response, right_response, content)
         
+        left_ids = list((left_response.metadata or {}).get("bullets_used") or [])
+        right_ids = list((right_response.metadata or {}).get("bullets_used") or [])
+        combined: List[str] = []
+        seen = set()
+        for bid in [*left_ids, *right_ids]:
+            if not bid or bid in seen:
+                continue
+            seen.add(bid)
+            combined.append(bid)
+
         return {
             "output": integrated,
             "hemisphere": "both",
             "mode": "integrate",
             "left": left_response.content,
-            "right": right_response.content
+            "right": right_response.content,
+            "bullets": {"left": left_ids, "right": right_ids, "all": combined},
+            "bullets_count": len(combined),
         }
     
     async def _integrate_responses(self, left: Message, right: Message, context: Dict) -> str:

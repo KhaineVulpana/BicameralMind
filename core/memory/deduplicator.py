@@ -140,8 +140,9 @@ class Deduplicator:
 
         logger.info(f"Found {len(duplicate_pairs)} duplicate pairs")
 
-        # Cluster duplicates
-        clusters = self._cluster_duplicates(duplicate_pairs, min_cluster_size)
+        # Cluster duplicates (index sets), then convert to DuplicateCluster objects
+        cluster_indices = self._cluster_duplicates(duplicate_pairs, min_cluster_size)
+        clusters = self.create_clusters_from_indices(bullets, cluster_indices, similarity_matrix)
 
         logger.info(f"Created {len(clusters)} duplicate clusters")
 
@@ -231,7 +232,7 @@ class Deduplicator:
             id=bullet_id,
             text=text,
             side=Hemisphere(metadata.get("side", "left")),
-            bullet_type=BulletType(metadata.get("type", "heuristic")),
+            type=BulletType(metadata.get("type", "heuristic")),
             tags=metadata.get("tags", []),
             confidence=metadata.get("confidence", 0.5),
             helpful_count=metadata.get("helpful_count", 0),

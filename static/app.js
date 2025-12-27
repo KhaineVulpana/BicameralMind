@@ -3,6 +3,7 @@ let ws = null;
 let isConnected = false;
 let toolCache = [];
 let chatSuggestions = [];
+let modelCache = [];
 const chatMetrics = {
     tokens: 0,
     bullets: 0,
@@ -83,6 +84,7 @@ function handleWebSocketMessage(data) {
         }
     } else if (data.type === 'tool_execution') {
         addToolLog(data);
+        scheduleToolStatsRefresh();
     }
 }
 
@@ -234,6 +236,113 @@ async function fetchTools() {
     }
 }
 
+let toolStatsRefreshTimer = null;
+function scheduleToolStatsRefresh() {
+    if (toolStatsRefreshTimer) return;
+    toolStatsRefreshTimer = setTimeout(async () => {
+        toolStatsRefreshTimer = null;
+        await fetchToolStats();
+    }, 600);
+}
+
+function renderToolTimeline(timeline) {
+    const chart = document.getElementById('tools-success-timeline');
+    if (!chart) return;
+
+    const buckets = Array.isArray(timeline) ? timeline : [];
+    if (!buckets.length) {
+        chart.innerHTML = '<span style="height: 0%"></span>'.repeat(6);
+        return;
+    }
+
+    chart.innerHTML = buckets.map((b) => {
+        const rate = Math.max(0, Math.min(1, Number(b.success_rate) || 0));
+        const height = Math.round(rate * 100);
+        const total = Number(b.total) || 0;
+        const success = Number(b.success) || 0;
+        const title = `${Math.round(rate * 100)}% (${success}/${total})`;
+        return `<span style="height: ${height}%" title="${escapeHtml(title)}"></span>`;
+    }).join('');
+}
+
+function renderToolFlow(recent) {
+    const flow = document.getElementById('tools-flow');
+    if (!flow) return;
+
+    const items = Array.isArray(recent) ? recent : [];
+    if (!items.length) {
+        flow.innerHTML = '<div class="flow-node">No executions yet</div>';
+        return;
+    }
+
+    const nodes = ['User'];
+    for (const item of items.slice(0, 6).reverse()) {
+        const hemi = item.hemisphere ? String(item.hemisphere).toUpperCase() : 'SYS';
+        const tool = item.tool ? String(item.tool) : '';
+        const ok = item.success ? 'OK' : 'FAIL';
+        nodes.push(`${hemi}: ${tool} (${ok})`);
+    }
+    nodes.push('Result');
+
+    flow.innerHTML = nodes.map((n) => `<div class="flow-node">${escapeHtml(n)}</div>`).join('');
+}
+
+async function fetchToolStats() {
+    try {
+        const resp = await fetch('/api/tools/stats?window_minutes=60&buckets=12&recent=12');
+        const data = await resp.json();
+
+        const perTool = Array.isArray(data.per_tool) ? data.per_tool : [];
+        const mostUsed = perTool[0] || null;
+
+        if (mostUsed) {
+            setText('tools-most-used', mostUsed.name || '-');
+            setText('tools-most-used-meta', `${mostUsed.total || 0} calls`);
+        } else {
+            setText('tools-most-used', '-');
+            setText('tools-most-used-meta', '-');
+        }
+
+        const eligibleForRate = perTool.filter((r) => (r.total || 0) > 0);
+        let best = null;
+        for (const row of eligibleForRate) {
+            if (!best) best = row;
+            const bestRate = Number(best.success_rate) || 0;
+            const rowRate = Number(row.success_rate) || 0;
+            if (rowRate > bestRate) best = row;
+        }
+
+        if (best) {
+            setText('tools-highest-success', `${Math.round((Number(best.success_rate) || 0) * 100)}%`);
+            setText('tools-highest-success-meta', best.name || '-');
+        } else {
+            setText('tools-highest-success', '-');
+            setText('tools-highest-success-meta', '-');
+        }
+
+        let mostLearning = null;
+        for (const row of eligibleForRate) {
+            if (!mostLearning) mostLearning = row;
+            const bestFails = Number(mostLearning.failed) || 0;
+            const rowFails = Number(row.failed) || 0;
+            if (rowFails > bestFails) mostLearning = row;
+        }
+
+        if (mostLearning) {
+            setText('tools-most-learning', `${mostLearning.failed || 0}`);
+            setText('tools-most-learning-meta', mostLearning.name || '-');
+        } else {
+            setText('tools-most-learning', '-');
+            setText('tools-most-learning-meta', '-');
+        }
+
+        renderToolTimeline(data.timeline);
+        renderToolFlow(data.recent);
+    } catch (error) {
+        console.error('Failed to fetch tool stats:', error);
+    }
+}
+
 function populateToolRunner(tools) {
     const select = document.getElementById('tool-exec-name');
     if (!select) return;
@@ -251,6 +360,129 @@ function populateToolRunner(tools) {
         select.value = current;
     } else if (!select.value && sorted.length) {
         select.value = sorted[0].name;
+    }
+}
+
+function populateModelSelect(select, models, { allowEmpty = false, emptyLabel = '' } = {}) {
+    if (!select) return;
+    const current = select.value;
+    const options = [];
+
+    if (allowEmpty) {
+        options.push(`<option value="">${escapeHtml(emptyLabel || '(default)')}</option>`);
+    }
+
+    for (const model of models || []) {
+        const name = model && model.name ? String(model.name) : '';
+        if (!name) continue;
+        const metaBits = [];
+        if (model.size) metaBits.push(model.size);
+        if (model.modified) metaBits.push(model.modified);
+        const label = metaBits.length ? `${name} — ${metaBits.join(' • ')}` : name;
+        options.push(`<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`);
+    }
+
+    select.innerHTML = options.join('') || '<option value="">(no models found)</option>';
+
+    if (current && Array.from(select.options).some((o) => o.value === current)) {
+        select.value = current;
+    }
+}
+
+async function initModelPickers() {
+    const slowSelect = document.getElementById('model-slow');
+    const fastSelect = document.getElementById('model-fast');
+    if (!slowSelect || !fastSelect) return;
+
+    slowSelect.disabled = true;
+    fastSelect.disabled = true;
+    slowSelect.innerHTML = '<option value="">Loading models...</option>';
+    fastSelect.innerHTML = '<option value="">Loading models...</option>';
+
+    try {
+        const [modelsResp, activeResp] = await Promise.all([
+            fetch('/api/models/ollama'),
+            fetch('/api/models/active'),
+        ]);
+        const modelsData = await modelsResp.json();
+        const activeData = await activeResp.json();
+
+        const models = Array.isArray(modelsData.models) ? modelsData.models : [];
+        const errorItem = models.find((m) => m && m.error);
+        if (errorItem && errorItem.error) {
+            slowSelect.innerHTML = `<option value="">${escapeHtml(String(errorItem.error))}</option>`;
+            fastSelect.innerHTML = `<option value="">${escapeHtml(String(errorItem.error))}</option>`;
+            return;
+        }
+
+        modelCache = models.slice();
+        populateModelSelect(slowSelect, modelCache, { allowEmpty: false });
+        populateModelSelect(fastSelect, modelCache, { allowEmpty: true, emptyLabel: '(same as slow)' });
+
+        const activeSlow = activeData && typeof activeData.slow === 'string' ? activeData.slow : '';
+        const activeFast = activeData && typeof activeData.fast === 'string' ? activeData.fast : '';
+
+        if (activeSlow && Array.from(slowSelect.options).some((o) => o.value === activeSlow)) {
+            slowSelect.value = activeSlow;
+        } else if (!slowSelect.value) {
+            const firstReal = Array.from(slowSelect.options).find((o) => o.value);
+            if (firstReal) slowSelect.value = firstReal.value;
+        }
+
+        if (activeFast && Array.from(fastSelect.options).some((o) => o.value === activeFast)) {
+            fastSelect.value = activeFast;
+        } else {
+            fastSelect.value = '';
+        }
+
+        slowSelect.disabled = false;
+        fastSelect.disabled = false;
+
+        const persist = async () => {
+            const slow = slowSelect.value;
+            const fast = fastSelect.value || '';
+            if (!slow) return;
+            const resp = await fetch('/api/models/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slow, fast }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                throw new Error(data.error || `HTTP ${resp.status}`);
+            }
+            await fetchStatus();
+        };
+
+        slowSelect.addEventListener('change', async () => {
+            slowSelect.disabled = true;
+            fastSelect.disabled = true;
+            try {
+                await persist();
+            } catch (error) {
+                alert(`Failed to set model: ${error.message || error}`);
+            } finally {
+                slowSelect.disabled = false;
+                fastSelect.disabled = false;
+            }
+        });
+
+        fastSelect.addEventListener('change', async () => {
+            slowSelect.disabled = true;
+            fastSelect.disabled = true;
+            try {
+                await persist();
+            } catch (error) {
+                alert(`Failed to set model: ${error.message || error}`);
+            } finally {
+                slowSelect.disabled = false;
+                fastSelect.disabled = false;
+            }
+        });
+    } catch (error) {
+        console.error('Failed to init model pickers:', error);
+        slowSelect.innerHTML = '<option value="">Failed to load models</option>';
+        fastSelect.innerHTML = '<option value="">Failed to load models</option>';
     }
 }
 
@@ -521,6 +753,7 @@ async function sendMessage() {
             bullets: data.bullets_used
         });
         renderChatTrace(data.details);
+        renderChatContext(data.details);
         pushSuggestionsFromDetails(data.details);
 
         chatMetrics.tokens += estimateTokens(text) + estimateTokens(responseText);
@@ -601,6 +834,10 @@ function clearChat() {
     if (traceDiv) {
         traceDiv.innerHTML = '<div class="context-item">No trace yet.</div>';
     }
+    const contextDiv = document.getElementById('chat-context');
+    if (contextDiv) {
+        contextDiv.innerHTML = '<div class="context-item">No bullets yet.</div>';
+    }
     chatSuggestions = [];
     renderSuggestions();
     resetChatMetrics();
@@ -646,6 +883,31 @@ function renderChatTrace(details) {
     }
 
     traceDiv.innerHTML = blocks.length ? blocks.join('') : '<div class="context-item">No trace yet.</div>';
+}
+
+function renderChatContext(details) {
+    const root = document.getElementById('chat-context');
+    if (!root) return;
+
+    const bullets = details && Array.isArray(details.retrieved_bullets) ? details.retrieved_bullets : [];
+    if (!bullets.length) {
+        root.innerHTML = '<div class="context-item">No bullets yet.</div>';
+        return;
+    }
+
+    root.innerHTML = bullets.slice(0, 10).map((b) => {
+        const id = b && b.id ? String(b.id) : '';
+        const side = b && b.side ? String(b.side).toUpperCase() : '-';
+        const score = b && b.score !== undefined ? Number(b.score) : NaN;
+        const scoreText = Number.isFinite(score) ? score.toFixed(2) : '-';
+        const text = b && b.text ? String(b.text) : '';
+        return `
+            <div class="context-item">
+                <strong>[${escapeHtml(id.slice(0, 12))}] (${escapeHtml(side)}) score=${escapeHtml(scoreText)}</strong>
+                <div class="context-meta">${escapeHtml(text)}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function extractCandidateBullets(text) {
@@ -811,21 +1073,28 @@ function initTabs() {
     });
 }
 
+function openMCPConfig() {
+    window.open('/static/mcp-config.html', '_blank', 'noopener,noreferrer');
+}
+
 // Initialize
 window.addEventListener('DOMContentLoaded', () => {
     initTabs();
+    initModelPickers();
     connectWebSocket();
     fetchStatus();
     fetchMemoryStats();
     fetchMCPServers();
     fetchProcedures();
     fetchTools();
+    fetchToolStats();
     fetchStaged();
     updateAnalytics();
 
     setInterval(fetchStatus, 5000);
     setInterval(fetchMemoryStats, 10000);
     setInterval(fetchMCPServers, 10000);
+    setInterval(fetchToolStats, 15000);
 
     const refreshBtn = document.getElementById('refresh-procedures');
     if (refreshBtn) refreshBtn.addEventListener('click', fetchProcedures);
@@ -841,6 +1110,18 @@ window.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('.procedure-card').forEach((card) => {
                 const text = card.textContent.toLowerCase();
                 card.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+
+    const toolSearch = document.getElementById('tool-search');
+    if (toolSearch) {
+        toolSearch.addEventListener('input', () => {
+            const query = toolSearch.value.toLowerCase().trim();
+            document.querySelectorAll('#tool-table .tool-row').forEach((row) => {
+                if (row.classList.contains('header')) return;
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
             });
         });
     }
