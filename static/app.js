@@ -4,6 +4,7 @@ let isConnected = false;
 let toolCache = [];
 let chatSuggestions = [];
 let modelCache = [];
+let lastBackendMode = null;
 const chatMetrics = {
     tokens: 0,
     bullets: 0,
@@ -94,6 +95,34 @@ function updateStatus(status) {
     statusEl.style.color = status === 'CONNECTED' ? '#3fbac2' : status === 'ERROR' ? '#e06c75' : '#7f8b9b';
 }
 
+function setUiEnabled(enabled, reason = '') {
+    const sendBtn = document.getElementById('send-btn');
+    const input = document.getElementById('message-input');
+    const toolRunBtn = document.getElementById('tool-exec-run');
+
+    if (sendBtn) sendBtn.disabled = !enabled;
+    if (input) input.disabled = !enabled;
+    if (toolRunBtn) toolRunBtn.disabled = !enabled;
+
+    if (!enabled && reason) {
+        const messagesDiv = document.getElementById('chat-messages');
+        if (messagesDiv) {
+            const existing = messagesDiv.querySelector('.message.system[data-kind="backend-disabled"]');
+            if (!existing) {
+                const msg = document.createElement('div');
+                msg.className = 'message system';
+                msg.dataset.kind = 'backend-disabled';
+                msg.innerHTML = `
+                    <div class="message-meta">System</div>
+                    <div class="text">${escapeHtml(reason)}</div>
+                `;
+                messagesDiv.appendChild(msg);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        }
+    }
+}
+
 async function fetchStatus() {
     try {
         const response = await fetch('/api/system/status');
@@ -132,8 +161,25 @@ async function fetchStatus() {
         if (modelName) modelName.textContent = data.model || '-';
         const systemHealth = document.getElementById('system-health');
         if (systemHealth) systemHealth.textContent = data.health || '-';
+
+        const backendMode = data.backend_mode || '';
+        const reason = data.reason || '';
+        const enabled = backendMode === 'ok';
+        if (backendMode && backendMode !== lastBackendMode) {
+            lastBackendMode = backendMode;
+            if (!enabled) {
+                setUiEnabled(false, reason || `Backend mode: ${backendMode}`);
+            } else {
+                setUiEnabled(true);
+            }
+        } else if (!enabled) {
+            setUiEnabled(false, reason || `Backend mode: ${backendMode || 'unknown'}`);
+        } else {
+            setUiEnabled(true);
+        }
     } catch (error) {
         console.error('Failed to fetch status:', error);
+        setUiEnabled(false, 'Unable to reach backend status endpoint.');
     }
 }
 

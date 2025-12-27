@@ -321,14 +321,28 @@ async def root():
 @app.get("/api/system/status")
 async def get_status():
     """Get current system status"""
+    if not BICAMERAL_AVAILABLE:
+        return {
+            "backend_mode": "test",
+            "mode": "test",
+            "tick_rate": 0.0,
+            "hemisphere": "none",
+            "memory": {"left": 0, "right": 0, "shared": 0, "staging": 0},
+            "model": "test",
+            "health": "TEST",
+            "reason": "BicameralMind imports unavailable; server running in UI-only test mode.",
+        }
+
     if bicameral_mind is None:
         return {
+            "backend_mode": "offline",
             "mode": "offline",
             "tick_rate": 0.0,
             "hemisphere": "none",
             "memory": {"left": 0, "right": 0, "shared": 0, "staging": 0},
             "model": "offline",
-            "health": "OFFLINE"
+            "health": "OFFLINE",
+            "reason": "BicameralMind not initialized.",
         }
 
     try:
@@ -341,6 +355,7 @@ async def get_status():
         memory_staging = stats.get("staging", {}).get("count", 0) if stats else 0
 
         return {
+            "backend_mode": "ok",
             "mode": bicameral_mind.meta_controller.mode.value,
             "tick_rate": bicameral_mind.meta_controller.get_tick_rate(),
             "hemisphere": bicameral_mind.meta_controller.get_active_hemisphere() or "none",
@@ -351,17 +366,20 @@ async def get_status():
                 "staging": memory_staging
             },
             "model": ((bicameral_mind.config.get("model", {}) or {}).get("slow") or (bicameral_mind.config.get("model", {}) or {})).get("name", "unknown"),
-            "health": "OK"
+            "health": "OK",
+            "reason": "",
         }
     except Exception as e:
         print(f"[ERROR] Status error: {e}")
         return {
+            "backend_mode": "error",
             "mode": "error",
             "tick_rate": 0.0,
             "hemisphere": "none",
             "memory": {"left": 0, "right": 0, "shared": 0, "staging": 0},
             "model": "unknown",
-            "health": "ERROR"
+            "health": "ERROR",
+            "reason": str(e),
         }
 
 

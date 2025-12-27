@@ -68,6 +68,8 @@ mcp:
   connection_timeout: 30
   tool_timeout: 60
   max_retries: 3
+  # Mock fallback is intended for unit tests only. Keep OFF in normal runs.
+  mock_on_failure: false
   allowed_tools: []
   blocked_tools: []
   auto_learn: true
@@ -91,7 +93,9 @@ mcp:
     args:
     - -y
     - '@executeautomation/powershell-mcp-server'
-    enabled: true
+    # This package is known to 404 in many environments; prefer built-in `cli.powershell`
+    # tools unless you have a working PowerShell MCP server package installed.
+    enabled: false
     description: Execute PowerShell commands
     category: system
   - name: puppeteer

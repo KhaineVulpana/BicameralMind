@@ -216,6 +216,7 @@ class ProceduralMemory:
         query: str,
         side: Hemisphere,
         tags: Optional[List[str]] = None,
+        statuses: Optional[List[str]] = None,
         k: Optional[int] = None,
         min_confidence: Optional[float] = None,
         include_shared: bool = True,
@@ -233,6 +234,7 @@ class ProceduralMemory:
             side=side.value,
             query_text=query,
             tags=tags,
+            statuses=statuses,
             k=k,
             min_confidence=min_confidence,
             include_shared=include_shared,
@@ -312,6 +314,24 @@ class ProceduralMemory:
             return []
         bullets = self.store.get_bullets_by_ids(bullet_ids)
         return [self._convert_bullet(b) for b in bullets]
+
+    def list_bullets(
+        self,
+        side: Hemisphere,
+        *,
+        limit: int = 1000,
+        statuses: Optional[List[str]] = None,
+        include_deprecated: bool = False,
+    ) -> List[Bullet]:
+        """List bullets for a hemisphere (non-semantic)."""
+        if not self.enabled:
+            return []
+        raw = self.store.list_bullets(side.value, limit=limit, include_deprecated=include_deprecated)
+        bullets = [self._convert_bullet(b) for b in raw]
+        if statuses:
+            allowed = {str(s).lower().strip() for s in statuses if s and str(s).strip()}
+            bullets = [b for b in bullets if str(getattr(b.status, "value", b.status)).lower() in allowed]
+        return bullets
 
     def update_bullet_metadata(self, bullet_id: str, updates: Dict[str, Any]) -> bool:
         """Update metadata for a stored bullet."""

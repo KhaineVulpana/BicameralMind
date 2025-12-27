@@ -43,7 +43,7 @@ The **Procedural Memory System** for Bicameral Mind has been successfully implem
   - Multi-query fusion (rank-based and score-based)
   - Adaptive k selection
   - Type-based filtering
-  - Recent and controversial bullet detection (stubs)
+  - Recent and controversial bullet detection
 
 ### 2. Integration with Agents
 
@@ -240,13 +240,10 @@ procedural_memory:
 ## Next Steps (Phase 2)
 
 ### Remaining TODOs:
-1. **Deduplication Logic** - Identify and merge near-duplicate bullets
-2. **Pruning Logic** - Remove persistently low-quality bullets
-3. **Reflection Module** - Analyze execution traces to extract insights
-4. **Curator Logic** - Automated bullet generation from reflections
-5. **Tick Integration** - Connect consciousness ticks to reflection depth (NOT scoring)
-6. **MCP Integration** - Tool outcome signals feed learning
-7. **Episodic Trace Analytics** - Link bullets to execution traces
+1. **MCP Integration** - Tool outcome signals feed learning
+2. **Episodic Trace Analytics** - Link bullets to execution traces
+3. **Cross-hemisphere suggestions** - Optional teaching mode
+4. **Policy hardening** - Risk-tiered tool learning gates
 
 ### Critical Reminders:
 -  **NEVER** increment helpful/harmful from ticks
@@ -262,8 +259,8 @@ procedural_memory:
 
 ---
 
-**Status:**  Phase 1 Complete - Procedural Memory Foundation Implemented
+**Status:**  Procedural Memory + Learning Maintenance Implemented
 
-**Date:** December 24, 2025
+**Date:** December 24-27, 2025
 
-**Next:** Reflection Module + Curator Logic (Phase 2)
+**Next:** MCP outcome wiring + episodic trace linkage

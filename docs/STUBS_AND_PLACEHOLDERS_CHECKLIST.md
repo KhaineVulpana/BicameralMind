@@ -11,7 +11,7 @@ Scope: project code under `core/`, `api/`, `integrations/`, `static/`, plus “R
   - Ref: `static/index.html:483` (“Tool Analytics” section).
 - [x] Replace the hardcoded “Success Rate Timeline” bar chart with real data.
   - Ref: `static/index.html:505` (inline `<span style="height: ...">` bars).
-- [ ] Add an API endpoint to return tool execution stats/time series (or expose `ToolExecutor.get_stats()` + history summaries) and render it.
+- [x] Add an API endpoint to return tool execution stats/time series (or expose `ToolExecutor.get_stats()` + history summaries) and render it.
   - Ref: `core/tools/executor.py` (`execution_history`, `get_stats()`).
 
 ### Tools Tab: Tool Flow (placeholder)
@@ -47,20 +47,20 @@ Scope: project code under `core/`, `api/`, `integrations/`, `static/`, plus “R
     - track last-discovered count during MCP tool registration
 
 ### “TEST MODE” fallback behavior (real but important)
-- [ ] Decide how UI should present/limit functionality in test mode (BicameralMind not initialized).
+- [x] Decide how UI should present/limit functionality in test mode (BicameralMind not initialized).
   - Ref: `api/main.py:713` (`[TEST MODE]` response).
   - Ref: `api/main.py:29` / `api/main.py:91` (startup fallback logs).
 
 ## MCP Integration (Mocks / Fallbacks)
 
 ### Mock tools fallback
-- [ ] Decide whether MCP mock fallback should exist in production; if not, disable/remove it.
+- [x] Decide whether MCP mock fallback should exist in production; if not, disable/remove it.
   - Ref: `integrations/mcp/mcp_client.py:204` (“Falling back to mock tools…”).
-- [ ] Replace `_get_mock_tools()` with real tool discovery / schema normalization, or limit it to unit tests.
+- [x] Replace `_get_mock_tools()` with real tool discovery / schema normalization, or limit it to unit tests.
   - Ref: `integrations/mcp/mcp_client.py:318` (“will be replaced with real discovery”).
 
 ### MCP server package/config issues (operational)
-- [ ] Fix/verify MCP server packages referenced in `config/config.yaml` (e.g., the PowerShell MCP server package name).
+- [x] Fix/verify MCP server packages referenced in `config/config.yaml` (e.g., the PowerShell MCP server package name).
   - Symptom: npm 404 on `@executeautomation/powershell-mcp-server` during startup.
   - Ref: `config/config.yaml` (`mcp.servers`).
 
@@ -87,22 +87,22 @@ Scope: project code under `core/`, `api/`, `integrations/`, `static/`, plus “R
   - Ref: `core/memory/retrieval.py:277`.
 
 ### Other Curator TODOs (quality + stats)
-- [ ] Improve `Curator._is_duplicate()` accuracy (embedding similarity vs text heuristics).
+- [x] Improve `Curator._is_duplicate()` accuracy (embedding similarity vs text heuristics).
   - Ref: `core/memory/curator.py:271`.
-- [ ] Add status filtering support in retrieval/list paths for curator workflows.
+- [x] Add status filtering support in retrieval/list paths for curator workflows.
   - Ref: `core/memory/curator.py:536`.
-- [ ] Add richer curation stats (by type/status, promotion/deprecation rates).
+- [x] Add richer curation stats (by type/status, promotion/deprecation rates).
   - Ref: `core/memory/curator.py:553`.
 
 ### Deduplicator placeholder helper
-- [ ] Decide whether to remove/keep the “simple embedding fallback” (`_text_to_simple_embedding`) and ensure it’s never used in production paths.
+- [x] Decide whether to remove/keep the “simple embedding fallback” (`_text_to_simple_embedding`) and ensure it’s never used in production paths.
   - Ref: `core/memory/deduplicator.py:260`.
 
 ## Docs Mentioning “Remaining TODOs” (Cross-check)
 
 These docs contain their own “Remaining TODOs” lists; keep them aligned with the code checklist above.
 
-- [ ] Reconcile `docs/PHASE2_LEARNING_PIPELINE.md` “Remaining TODOs” with current code status (some items may already be implemented).
+- [x] Reconcile `docs/PHASE2_LEARNING_PIPELINE.md` “Remaining TODOs” with current code status (some items may already be implemented).
   - Ref: `docs/PHASE2_LEARNING_PIPELINE.md` (section “### Remaining TODOs:”).
-- [ ] Reconcile `docs/PROCEDURAL_MEMORY_IMPLEMENTATION.md` “Remaining TODOs” with current code status.
+- [x] Reconcile `docs/PROCEDURAL_MEMORY_IMPLEMENTATION.md` “Remaining TODOs” with current code status.
   - Ref: `docs/PROCEDURAL_MEMORY_IMPLEMENTATION.md` (section “### Remaining TODOs:”).

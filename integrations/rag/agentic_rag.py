@@ -24,13 +24,9 @@ class AgenticRAG:
         vectorstore=None,
         splitter: Optional[RecursiveCharacterTextSplitter] = None,
         embeddings=None,
-        llm_fast=None,
-        llm_slow=None,
     ):
         self.config = config.get("rag", {}) if isinstance(config, dict) else {}
         self.llm = llm_client
-        self.llm_fast = llm_fast or llm_client
-        self.llm_slow = llm_slow or llm_client
 
         # Vector store setup (allow injection for tests)
         if vectorstore is not None:
@@ -79,7 +75,7 @@ class AgenticRAG:
         context = "\n\n".join([doc.page_content for doc in docs])
         
         prompt = self._format_synthesis_prompt(query, context)
-        response = await self.llm_slow.ainvoke(prompt)
+        response = await self.llm.ainvoke(prompt)
         
         return {
             "answer": response.content if hasattr(response, 'content') else str(response),
@@ -92,7 +88,6 @@ class AgenticRAG:
         
         max_iterations = self.config.get("max_iterations", 5)
         all_retrieved = []
-        seen = set()
         iteration = 0
         current_query = query
 
@@ -109,24 +104,8 @@ class AgenticRAG:
                 current_query,
                 k=self.config.get("top_k", 5)
             )
-
-            if not docs:
-                logger.debug(f"Iteration {iteration}: Retrieved 0 docs; stopping agentic loop")
-                break
-
-            new_docs = 0
-            for doc in docs:
-                md_items = tuple(sorted((doc.metadata or {}).items())) if hasattr(doc, "metadata") else ()
-                key = (getattr(doc, "page_content", str(doc)), md_items)
-                if key in seen:
-                    continue
-                seen.add(key)
-                all_retrieved.append(doc)
-                new_docs += 1
-
-            if new_docs == 0:
-                logger.debug(f"Iteration {iteration}: Retrieved 0 new docs; stopping agentic loop")
-                break
+            
+            all_retrieved.extend(docs)
             
             # Check coverage
             context = "\n\n".join([doc.page_content for doc in all_retrieved])
@@ -135,11 +114,8 @@ class AgenticRAG:
             logger.debug(f"Iteration {iteration}: Coverage {coverage['score']:.2f}")
             
             # Decide: continue or stop?
-            if coverage["sufficient"]:
+            if coverage["sufficient"] or iteration >= max_iterations:
                 logger.info(f"Coverage sufficient after {iteration} iterations")
-                break
-            if iteration >= max_iterations:
-                logger.info(f"Reached max iterations ({max_iterations}) without sufficient coverage")
                 break
             
             # Refine query
@@ -154,7 +130,7 @@ class AgenticRAG:
         # Synthesize final answer
         final_context = "\n\n".join([doc.page_content for doc in all_retrieved])
         prompt = self._format_synthesis_prompt(query, final_context)
-        response = await self.llm_slow.ainvoke(prompt)
+        response = await self.llm.ainvoke(prompt)
         
         return {
             "answer": response.content if hasattr(response, 'content') else str(response),
@@ -167,7 +143,7 @@ class AgenticRAG:
         """Assess if retrieved context sufficiently covers the query"""
         
         prompt = self._format_coverage_prompt(query, context)
-        response = await self.llm_fast.ainvoke(prompt)
+        response = await self.llm.ainvoke(prompt)
         result = response.content if hasattr(response, "content") else str(response)
 
         sufficient = "SUFFICIENT" in result and "INSUFFICIENT" not in result.upper()
@@ -186,7 +162,7 @@ class AgenticRAG:
             retrieved=context[:300],
             coverage=coverage.get("reason", ""),
         )
-        response = await self.llm_fast.ainvoke(prompt)
+        response = await self.llm.ainvoke(prompt)
         result = response.content if hasattr(response, "content") else str(response)
         
         if "SUFFICIENT" in result:

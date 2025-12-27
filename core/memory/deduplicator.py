@@ -256,22 +256,6 @@ class Deduplicator:
         embeddings = self.store._embed(texts)
         return np.array(embeddings)
 
-    def _text_to_simple_embedding(self, text: str) -> List[float]:
-        """Simple text embedding fallback (for testing)"""
-        # This is a placeholder - in production, use actual embeddings
-        # For now, create a simple hash-based vector
-        import hashlib
-        hash_obj = hashlib.md5(text.encode())
-        hash_bytes = hash_obj.digest()
-
-        # Convert to 384-dimensional vector (matching sentence-transformers)
-        embedding = []
-        for i in range(384):
-            byte_idx = i % len(hash_bytes)
-            embedding.append(float(hash_bytes[byte_idx]) / 255.0)
-
-        return embedding
-
     def _find_duplicate_pairs(
         self,
         bullets: List[Bullet],

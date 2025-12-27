@@ -208,6 +208,7 @@ class ProceduralMemoryStore:
         side: str,
         query_text: str,
         tags: Optional[List[str]] = None,
+        statuses: Optional[List[str]] = None,
         k: Optional[int] = None,
         min_confidence: Optional[float] = None,
         include_shared: bool = True,
@@ -229,7 +230,10 @@ class ProceduralMemoryStore:
         bullets: List[ProceduralBullet] = []
         used_ids: List[str] = []
 
-        def _fetch_from(s: str, top_k: int, min_conf: Optional[float], tag_filter: Optional[List[str]]):
+        status_filter = [s.lower().strip() for s in (statuses or []) if s and str(s).strip()]
+        tag_filter = [t for t in (tags or []) if t and str(t).strip()]
+
+        def _fetch_from(s: str, top_k: int, min_conf: Optional[float]):
             col = self._collections[s]
             where = {"status": {"$ne": "deprecated"}}
 
@@ -270,6 +274,10 @@ class ProceduralMemoryStore:
                     md_tags = [t for t in md_tags if t]
                     if not any(t in md_tags for t in tag_filter):
                         continue
+                if status_filter:
+                    st = str(md.get("status", "") or "").lower()
+                    if st not in status_filter:
+                        continue
 
                 out.append(
                     ProceduralBullet(
@@ -300,13 +308,13 @@ class ProceduralMemoryStore:
 
         # Hemisphere collection
         min_confidence = min_confidence
-        bullets.extend(_fetch_from(side, k, min_confidence, tags))
+        bullets.extend(_fetch_from(side, k, min_confidence))
 
         # Shared collection (small, high-confidence)
         if include_shared:
             shared_k = self.k_shared
             shared_min = 0.8 if min_confidence is None else max(min_confidence, 0.8)
-            bullets.extend(_fetch_from("shared", shared_k, shared_min, tags))
+            bullets.extend(_fetch_from("shared", shared_k, shared_min))
 
         # Deduplicate by text
         seen = set()

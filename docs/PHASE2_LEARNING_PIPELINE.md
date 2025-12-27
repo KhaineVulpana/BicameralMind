@@ -43,7 +43,7 @@ The Curator converts insights into bullets and manages memory quality.
 - **Duplicate detection**: Prevents redundant knowledge
 - **Quality filtering**: Rejects low-confidence or trivial insights
 - **Lifecycle management**: Quarantine -> Active -> Shared promotion
-- **Maintenance operations**: Pruning and deduplication (stubs for now)
+- **Maintenance operations**: Pruning and deduplication (implemented)
 
 **Curation Flow:**
 ```
@@ -298,19 +298,17 @@ class LeftBrain:
 ## Next Steps (Future Enhancements)
 
 ### Remaining TODOs:
-1. **Implement deduplication** - Use embeddings for semantic similarity
-2. **Implement pruning** - Actually remove/deprecate low-quality bullets
-3. **MCP Integration** - Automatic outcome signals from tool execution
-4. **Episodic Memory** - Link bullets to execution traces for replay
-5. **Cross-hemisphere suggestions** - Optional teaching mode
-6. **Multi-modal insights** - Extract from visual/audio traces
+1. **MCP Integration** - Automatic outcome signals from tool execution
+2. **Episodic Memory** - Link bullets to execution traces for replay
+3. **Cross-hemisphere suggestions** - Optional teaching mode
+4. **Multi-modal insights** - Extract from visual/audio traces
 
 ### Recommended Order:
 1.  **Phase 1**: Procedural memory foundation -> DONE
 2.  **Phase 2**: Reflection & curation pipeline -> DONE
 3. **Phase 3**: MCP integration for automatic learning
-4. **Phase 4**: Advanced deduplication & pruning
-5. **Phase 5**: Cross-hemisphere learning & suggestions
+4. **Phase 4**: Cross-hemisphere learning & suggestions
+5. **Phase 5**: Additional modalities + policy hardening
 
 ## Configuration
 

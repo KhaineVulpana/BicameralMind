@@ -90,7 +90,9 @@ class MCPClient:
         self.connection_timeout = self.config.get("connection_timeout", 30)
         self.tool_timeout = self.config.get("tool_timeout", 60)
         self.max_retries = self.config.get("max_retries", 3)
-        self.mock_on_failure = self.config.get("mock_on_failure", True)
+        # Mock fallback is useful for unit tests, but should be OFF by default to avoid
+        # confusing behavior (and false-positive "success" outcomes).
+        self.mock_on_failure = bool(self.config.get("mock_on_failure", False))
 
         self.servers: Dict[str, MCPServer] = {}
         self.tools: Dict[str, MCPTool] = {}  # tool_name -> MCPTool
@@ -299,7 +301,10 @@ class MCPClient:
                 if not cursor:
                     break
         else:
-            tools_payload = self._get_mock_tools(server.name)
+            if self.mock_on_failure:
+                tools_payload = self._get_mock_tools(server.name)
+            else:
+                tools_payload = []
 
         for tool_data in tools_payload:
             tool = MCPTool(
@@ -316,7 +321,9 @@ class MCPClient:
                 logger.debug(f"Discovered tool: {tool.name}")
 
     def _get_mock_tools(self, server_name: str) -> List[Dict[str, Any]]:
-        """Get mock tools for testing (will be replaced with real discovery)"""
+        """Get mock tools for unit tests only."""
+        if not self.mock_on_failure:
+            return []
         if server_name == "filesystem":
             return [
                 {
@@ -502,8 +509,9 @@ class MCPClient:
             if self.mock_on_failure:
                 return MCPToolResult(
                     tool_name=tool.name,
-                    success=True,
-                    output=f"Mock result from {tool.name}",
+                    success=False,
+                    output=f"[MOCK] No server connected for {tool.name}",
+                    error="Server not connected (mock fallback enabled)",
                     metadata={"server": tool.server_name, "mock": True},
                 )
             return MCPToolResult(

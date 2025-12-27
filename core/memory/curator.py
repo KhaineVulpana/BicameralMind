@@ -18,6 +18,7 @@ Following ACE principles:
 """
 
 from datetime import datetime, timedelta, timezone
+import math
 from typing import List, Dict, Any, Optional, Tuple
 from loguru import logger
 
@@ -257,14 +258,40 @@ class Curator:
             include_shared=True,
         )
 
-        # Check for high similarity
-        for existing in similar_bullets:
-            similarity = self._text_similarity(candidate.text, existing.text)
-
-            if similarity > 0.9:  # Very high similarity threshold
-                return (True, existing.id)
+        # Check for high similarity using embeddings if possible.
+        # Fallback to word-overlap similarity if embeddings are unavailable.
+        try:
+            texts = [candidate.text] + [b.text for b in similar_bullets]
+            embeddings = self.memory.store._embed(texts)  # type: ignore[attr-defined]
+            cand = embeddings[0]
+            for existing, emb in zip(similar_bullets, embeddings[1:]):
+                similarity = self._cosine_similarity(cand, emb)
+                if similarity >= 0.92:
+                    return (True, existing.id)
+        except Exception:
+            for existing in similar_bullets:
+                similarity = self._text_similarity(candidate.text, existing.text)
+                if similarity > 0.9:
+                    return (True, existing.id)
 
         return (False, None)
+
+    @staticmethod
+    def _cosine_similarity(a: List[float], b: List[float]) -> float:
+        if not a or not b:
+            return 0.0
+        n = min(len(a), len(b))
+        dot = 0.0
+        na = 0.0
+        nb = 0.0
+        for i in range(n):
+            av = float(a[i])
+            bv = float(b[i])
+            dot += av * bv
+            na += av * av
+            nb += bv * bv
+        denom = math.sqrt(na) * math.sqrt(nb)
+        return (dot / denom) if denom > 0 else 0.0
 
     def _text_similarity(self, text1: str, text2: str) -> float:
         """Simple text similarity metric.
@@ -622,16 +649,25 @@ class Curator:
             f"(threshold={activation_threshold})"
         )
 
-        activated_ids = []
+        activated_ids: List[str] = []
 
-        # Note: This is usually handled automatically by the store
-        # But we can explicitly check and report
+        # Note: This is usually handled automatically by the store on outcomes,
+        # but we can explicitly promote quarantined bullets that have enough
+        # helpful signals and no harmful signals.
+        quarantined = self.memory.list_bullets(
+            hemisphere,
+            limit=5000,
+            statuses=["quarantined"],
+            include_deprecated=False,
+        )
 
-        # Retrieve quarantined bullets
-        # TODO: Need ability to filter by status in retrieve
+        for bullet in quarantined:
+            if bullet.should_activate(threshold=activation_threshold):
+                ok = self.memory.store.set_status(bullet.id, BulletStatus.ACTIVE.value)
+                if ok:
+                    activated_ids.append(bullet.id)
 
         logger.info(f"Activated {len(activated_ids)} quarantined bullets")
-
         return activated_ids
 
     def get_curation_stats(self, hemisphere: Hemisphere) -> Dict[str, Any]:
@@ -644,16 +680,53 @@ class Curator:
             Dictionary of statistics
         """
         stats = self.memory.get_stats()
+        enabled = bool(stats.get("enabled", False))
+        total = int(stats.get("collections", {}).get(hemisphere.value, {}).get("count", 0) or 0)
 
-        # TODO: Add more detailed stats:
-        # - Bullets by type
-        # - Bullets by status
-        # - Average scores
-        # - Promotion rate
-        # - Deprecation rate
+        bullets = []
+        if enabled:
+            try:
+                bullets = self.memory.list_bullets(
+                    hemisphere,
+                    limit=10000,
+                    include_deprecated=True,
+                )
+            except Exception:
+                bullets = []
+
+        by_status: Dict[str, int] = {}
+        by_type: Dict[str, int] = {}
+        score_sum = 0.0
+        score_n = 0
+
+        for b in bullets:
+            st = str(getattr(b.status, "value", b.status))
+            by_status[st] = by_status.get(st, 0) + 1
+            tp = str(getattr(b.type, "value", b.type))
+            by_type[tp] = by_type.get(tp, 0) + 1
+            try:
+                score_sum += float(b.score())
+                score_n += 1
+            except Exception:
+                pass
+
+        shared_promotions_from_side = 0
+        if enabled:
+            try:
+                shared = self.memory.list_bullets(Hemisphere.SHARED, limit=10000, include_deprecated=True)
+                marker = f"promoted_from:{hemisphere.value}"
+                for b in shared:
+                    if (b.source_trace_id or "") == marker:
+                        shared_promotions_from_side += 1
+            except Exception:
+                pass
 
         return {
             "hemisphere": hemisphere.value,
-            "total_bullets": stats.get("collections", {}).get(hemisphere.value, {}).get("count", 0),
-            "enabled": stats.get("enabled", False),
+            "enabled": enabled,
+            "total_bullets": total,
+            "by_status": by_status,
+            "by_type": by_type,
+            "avg_score": (score_sum / score_n) if score_n else 0.0,
+            "shared_promotions_from_side": shared_promotions_from_side,
         }
