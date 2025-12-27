@@ -30,6 +30,12 @@
     box-sizing: border-box;
 }
 
+html,
+body {
+    height: 100%;
+    overflow: hidden;
+}
+
 body {
     font-family: var(--font-sans);
     color: var(--ink-1);
@@ -38,7 +44,6 @@ body {
         radial-gradient(circle at 80% 12%, rgba(106, 124, 255, 0.18), transparent 40%),
         radial-gradient(circle at 82% 78%, rgba(240, 180, 41, 0.12), transparent 40%),
         linear-gradient(180deg, #090c12 0%, #0b0f14 100%);
-    min-height: 100vh;
 }
 
 body::before {
@@ -57,6 +62,9 @@ body::before {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    height: 100vh;
+    overflow: hidden;
+    min-height: 0;
 }
 
 .top-bar {
@@ -161,6 +169,9 @@ body::before {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .tab-panel {
@@ -170,6 +181,13 @@ body::before {
 .tab-panel.active {
     display: block;
     animation: panel-in 0.4s ease both;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+#tab-chat.tab-panel.active {
+    overflow: hidden;
 }
 
 .panel {
@@ -554,10 +572,12 @@ body::before {
     display: grid;
     gap: 18px;
     grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+    height: 100%;
+    min-height: 0;
 }
 
 .chat-main {
-    min-height: 640px;
+    min-height: 0;
 }
 
 .chat-controls {
@@ -587,6 +607,7 @@ body::before {
 .chat-messages {
     flex: 1;
     overflow-y: auto;
+    min-height: 0;
     padding: 16px;
     background: rgba(9, 13, 20, 0.9);
     border-radius: var(--radius-md);
@@ -594,6 +615,11 @@ body::before {
     display: flex;
     flex-direction: column;
     gap: 14px;
+}
+
+.chat-side {
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .message {
@@ -677,6 +703,21 @@ body::before {
     justify-content: flex-end;
 }
 
+.chat-hint {
+    font-size: 12px;
+    color: var(--ink-3);
+}
+
+.chat-hint code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-2);
+    background: rgba(10, 16, 24, 0.7);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 8px;
+}
+
 .primary-btn {
     border: none;
     background: linear-gradient(135deg, #3fbac2, #267b86);
@@ -706,6 +747,28 @@ body::before {
 .context-block h3 {
     font-size: 13px;
     color: var(--ink-2);
+}
+
+.trace-block {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: rgba(10, 16, 24, 0.6);
+    padding: 10px 12px;
+}
+
+.trace-block summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--ink-2);
+}
+
+.trace-block pre {
+    margin: 10px 0 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-1);
+    white-space: pre-wrap;
+    line-height: 1.5;
 }
 
 .context-list {

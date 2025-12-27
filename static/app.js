@@ -1,6 +1,8 @@
 // WebSocket connection
 let ws = null;
 let isConnected = false;
+let toolCache = [];
+let chatSuggestions = [];
 const chatMetrics = {
     tokens: 0,
     bullets: 0,
@@ -200,6 +202,8 @@ async function fetchTools() {
         const response = await fetch('/api/tools');
         const data = await response.json();
         const tools = data.tools || [];
+        toolCache = tools.slice();
+        populateToolRunner(tools);
         if (!tools.length) {
             table.innerHTML = `
                 <div class="tool-row header">
@@ -227,6 +231,66 @@ async function fetchTools() {
     } catch (error) {
         console.error('Failed to fetch tools:', error);
         table.innerHTML = '<div class="tool-row"><span>Failed to load tools</span><span></span><span></span></div>';
+    }
+}
+
+function populateToolRunner(tools) {
+    const select = document.getElementById('tool-exec-name');
+    if (!select) return;
+
+    const current = select.value;
+    const sorted = (tools || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    select.innerHTML = sorted
+        .map((tool) => {
+            const label = `${tool.name} (${tool.provider})`;
+            return `<option value="${escapeHtml(tool.name)}">${escapeHtml(label)}</option>`;
+        })
+        .join('');
+
+    if (current && (tools || []).some((t) => t.name === current)) {
+        select.value = current;
+    } else if (!select.value && sorted.length) {
+        select.value = sorted[0].name;
+    }
+}
+
+async function runSelectedTool() {
+    const nameEl = document.getElementById('tool-exec-name');
+    const paramsEl = document.getElementById('tool-exec-params');
+    const hemiEl = document.getElementById('tool-exec-hemisphere');
+    const confEl = document.getElementById('tool-exec-confidence');
+    const outEl = document.getElementById('tool-exec-output');
+    if (!nameEl || !paramsEl || !hemiEl || !confEl || !outEl) return;
+
+    const toolName = nameEl.value;
+    let parameters = {};
+    try {
+        parameters = JSON.parse(paramsEl.value || '{}');
+    } catch (err) {
+        outEl.value = `Invalid JSON: ${err}`;
+        return;
+    }
+
+    const confidence = Number(confEl.value);
+    const hemisphere = (hemiEl.value || 'left').toLowerCase();
+
+    outEl.value = 'Running...';
+
+    try {
+        const resp = await fetch('/api/tools/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tool_name: toolName,
+                parameters,
+                hemisphere,
+                confidence: Number.isFinite(confidence) ? confidence : 0.5
+            })
+        });
+        const data = await resp.json();
+        outEl.value = JSON.stringify(data, null, 2);
+    } catch (error) {
+        outEl.value = `Request failed: ${error}`;
     }
 }
 
@@ -450,12 +514,14 @@ async function sendMessage() {
         const data = await response.json();
 
         const responseText = data.response || data.output || '';
-        addMessage(data.hemisphere || 'assistant', responseText, {
+        addMessage('assistant', responseText, {
             mode: data.mode,
             tick: data.tick_rate,
             hemisphere: data.hemisphere,
             bullets: data.bullets_used
         });
+        renderChatTrace(data.details);
+        pushSuggestionsFromDetails(data.details);
 
         chatMetrics.tokens += estimateTokens(text) + estimateTokens(responseText);
         if (Number.isFinite(data.bullets_used)) {
@@ -531,7 +597,180 @@ function clearChat() {
             <div class="text">BicameralMind ready. Ask a question to begin.</div>
         </div>
     `;
+    const traceDiv = document.getElementById('chat-trace');
+    if (traceDiv) {
+        traceDiv.innerHTML = '<div class="context-item">No trace yet.</div>';
+    }
+    chatSuggestions = [];
+    renderSuggestions();
     resetChatMetrics();
+}
+
+function renderChatTrace(details) {
+    const traceDiv = document.getElementById('chat-trace');
+    if (!traceDiv) return;
+
+    if (!details || typeof details !== 'object') {
+        traceDiv.innerHTML = '<div class="context-item">No trace available.</div>';
+        return;
+    }
+
+    const left = details.left ? String(details.left) : '';
+    const right = details.right ? String(details.right) : '';
+    const rag = details.rag_context && typeof details.rag_context === 'object' ? details.rag_context : null;
+
+    const blocks = [];
+
+    if (rag) {
+        const sources = Array.isArray(rag.sources) ? rag.sources.slice(0, 3).join('\n') : '';
+        const ragText = [
+            rag.answer ? `Answer:\n${rag.answer}` : '',
+            sources ? `Sources:\n${sources}` : '',
+            typeof rag.iterations === 'number' ? `Iterations: ${rag.iterations}` : ''
+        ].filter(Boolean).join('\n\n');
+        blocks.push(
+            `<details class="trace-block" open><summary>RAG Context</summary><pre>${escapeHtml(ragText || '—')}</pre></details>`
+        );
+    }
+
+    if (left) {
+        blocks.push(
+            `<details class="trace-block"><summary>Left Brain</summary><pre>${escapeHtml(left)}</pre></details>`
+        );
+    }
+
+    if (right) {
+        blocks.push(
+            `<details class="trace-block"><summary>Right Brain</summary><pre>${escapeHtml(right)}</pre></details>`
+        );
+    }
+
+    traceDiv.innerHTML = blocks.length ? blocks.join('') : '<div class="context-item">No trace yet.</div>';
+}
+
+function extractCandidateBullets(text) {
+    if (!text) return [];
+    const lines = String(text).split('\n').map((l) => l.trim()).filter(Boolean);
+    const candidates = [];
+
+    for (const line of lines) {
+        if (candidates.length >= 6) break;
+        const looksLikeBullet = /^([-*]\\s+|\\d+\\.\\s+|\\d+\\)\\s+)/.test(line);
+        if (!looksLikeBullet) continue;
+        const cleaned = line.replace(/^([-*]\\s+|\\d+\\.\\s+|\\d+\\)\\s+)/, '').trim();
+        if (cleaned.length >= 12 && cleaned.length <= 220) {
+            candidates.push(cleaned);
+        }
+    }
+
+    if (candidates.length) return candidates;
+
+    const raw = String(text).replace(/\\s+/g, ' ').trim();
+    if (!raw) return [];
+    const parts = raw.split(/(?<=[.!?])\\s+/).slice(0, 2);
+    const fallback = parts.join(' ').trim();
+    if (fallback.length >= 12) return [fallback.slice(0, 220)];
+    return [];
+}
+
+function pushSuggestionsFromDetails(details) {
+    if (!details || typeof details !== 'object') return;
+    const left = details.left ? String(details.left) : '';
+    const right = details.right ? String(details.right) : '';
+
+    const newItems = [];
+    for (const candidate of [...extractCandidateBullets(left), ...extractCandidateBullets(right)]) {
+        if (!candidate) continue;
+        newItems.push({
+            id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+            text: candidate,
+            confidence: 0.5,
+            tags: []
+        });
+    }
+
+    const seen = new Set(chatSuggestions.map((s) => s.text.toLowerCase().trim()));
+    for (const item of newItems) {
+        const key = item.text.toLowerCase().trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        chatSuggestions.unshift(item);
+    }
+
+    chatSuggestions = chatSuggestions.slice(0, 6);
+    renderSuggestions();
+}
+
+function renderSuggestions() {
+    const root = document.getElementById('chat-suggestions');
+    if (!root) return;
+
+    if (!chatSuggestions.length) {
+        root.innerHTML = '<div class="context-item">No suggestions yet.</div>';
+        return;
+    }
+
+    root.innerHTML = chatSuggestions.map((s) => {
+        return `
+            <div class="context-item" data-suggestion-id="${escapeHtml(s.id)}">
+                <strong>${escapeHtml(s.text)}</strong>
+                <div class="context-actions">
+                    <button class="ghost-btn" data-action="approve">Send to Staging</button>
+                    <button class="ghost-btn" data-action="edit">Edit</button>
+                    <button class="ghost-btn" data-action="reject">Dismiss</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    root.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const container = btn.closest('[data-suggestion-id]');
+            const id = container ? container.dataset.suggestionId : null;
+            if (!id) return;
+            const idx = chatSuggestions.findIndex((s) => s.id === id);
+            if (idx < 0) return;
+            const item = chatSuggestions[idx];
+
+            if (btn.dataset.action === 'reject') {
+                chatSuggestions.splice(idx, 1);
+                renderSuggestions();
+                return;
+            }
+
+            if (btn.dataset.action === 'edit') {
+                const updated = prompt('Edit bullet text', item.text);
+                if (updated && updated.trim()) {
+                    item.text = updated.trim();
+                    renderSuggestions();
+                }
+                return;
+            }
+
+            if (btn.dataset.action === 'approve') {
+                btn.disabled = true;
+                try {
+                    const resp = await fetch('/api/memory/staged', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: item.text, confidence: item.confidence, tags: item.tags })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || data.error) {
+                        alert(`Failed to stage bullet: ${data.error || resp.status}`);
+                        btn.disabled = false;
+                        return;
+                    }
+                    chatSuggestions.splice(idx, 1);
+                    renderSuggestions();
+                    fetchStaged();
+                } catch (error) {
+                    alert(`Failed to stage bullet: ${error}`);
+                    btn.disabled = false;
+                }
+            }
+        });
+    });
 }
 
 function addToolLog(data) {
@@ -612,6 +851,9 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('send-btn').addEventListener('click', sendMessage);
     const clearBtn = document.getElementById('chat-clear');
     if (clearBtn) clearBtn.addEventListener('click', clearChat);
+
+    const toolRunBtn = document.getElementById('tool-exec-run');
+    if (toolRunBtn) toolRunBtn.addEventListener('click', runSelectedTool);
 
     const input = document.getElementById('message-input');
     input.addEventListener('keydown', (e) => {

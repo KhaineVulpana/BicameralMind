@@ -1,249 +1,201 @@
 model:
-  name: qwen3:14b  # adjusted for local hardware  # Change to your preferred Ollama model
+  name: qwen3:14b
   temperature: 0.7
   max_tokens: 2048
-
 bicameral:
-  tick_interval: 0.5  # seconds between consciousness ticks (base rate)
+  tick_interval: 0.5
   tick_threshold:
-    entropy: 0.6  # uncertainty threshold
-    conflict: 0.5  # inter-brain conflict threshold
-    novelty: 0.7  # pattern novelty threshold
-
-  # Adaptive tick interval (Phase 6+)
-  adaptive_tick: true  # Enable dynamic tick rate adjustment
-  min_tick_interval: 0.1  # Fastest tick rate (high pressure/alertness)
-  max_tick_interval: 2.0  # Slowest tick rate (low pressure/alertness)
-
-  # Energy/Attention budget (Phase 6+)
-  energy_budget_enabled: true  # Enable energy management
-  max_energy: 100.0  # Maximum energy capacity
-  energy_regen_rate: 10.0  # Energy regeneration per second
-  energy_cost_explore: 15.0  # Cost for EXPLORE mode
-  energy_cost_exploit: 5.0  # Cost for EXPLOIT mode
-  energy_cost_integrate: 20.0  # Cost for INTEGRATE mode
-  
+    entropy: 0.6
+    conflict: 0.5
+    novelty: 0.7
+  adaptive_tick: true
+  min_tick_interval: 0.1
+  max_tick_interval: 2.0
+  energy_budget_enabled: true
+  max_energy: 100.0
+  energy_regen_rate: 10.0
+  energy_cost_explore: 15.0
+  energy_cost_exploit: 5.0
+  energy_cost_integrate: 20.0
   left_brain:
-    name: "PatternRecognition"
-    focus: "stability"
-    k_bullets: 8  # Fewer bullets, higher precision
-    min_bullet_confidence: 0.5  # Higher confidence threshold
+    name: PatternRecognition
+    focus: stability
+    k_bullets: 8
+    min_bullet_confidence: 0.5
     behaviors:
-      - "compress_patterns"
-      - "classify"
-      - "replicate_known"
-      - "validate_consistency"
-
+    - compress_patterns
+    - classify
+    - replicate_known
+    - validate_consistency
   right_brain:
-    name: "PatternMutation"
-    focus: "exploration"
-    k_bullets: 12  # More bullets, more exploration
-    min_bullet_confidence: 0.3  # Lower confidence threshold for novelty
+    name: PatternMutation
+    focus: exploration
+    k_bullets: 12
+    min_bullet_confidence: 0.3
     behaviors:
-      - "detect_anomalies"
-      - "mutate_patterns"
-      - "generate_variants"
-      - "explore_novel"
-
+    - detect_anomalies
+    - mutate_patterns
+    - generate_variants
+    - explore_novel
 rag:
   enabled: true
   chunk_size: 512
   chunk_overlap: 50
   top_k: 5
-  retrieval_mode: "agentic"  # agentic or single-pass
+  retrieval_mode: agentic
   max_iterations: 5
-
 vector_store:
-  type: "chroma"  # chroma or faiss
-  persist_directory: "./data/vector_store"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-
+  type: chroma
+  persist_directory: ./data/vector_store
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
 episodic_memory:
-  path: "./data/memory/episodes.jsonl"
-  persist_directory: "./data/vector_store/episodes"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  path: ./data/memory/episodes.jsonl
+  persist_directory: ./data/vector_store/episodes
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
   top_k: 5
-
 tools:
   enabled: true
-  registry_path: "./data/tools/tool_registry.json"
-  index_persist_directory: "./data/vector_store/tools"
-  index_collection: "tool_registry"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  registry_path: ./data/tools/tool_registry.json
+  index_persist_directory: ./data/vector_store/tools
+  index_collection: tool_registry
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
   auto_discover: true
   auto_index: true
   allowed_tools: []
   blocked_tools: []
-
 mcp:
-  # Enable MCP to allow the bicameral mind to call external tools via the
-  # Model Context Protocol. When enabled, the system will connect to the
-  # configured servers and discover available tools.
   enabled: true
-
-  # Connection settings
-  connection_timeout: 30  # seconds
-  tool_timeout: 60  # seconds per tool execution
-  max_retries: 3  # connection retry attempts
-
-  # Tool filtering
-  allowed_tools: []  # Empty list = allow all tools (except blocked)
-  blocked_tools: []  # Tools to explicitly block (e.g., ["delete_all", "format_disk"])
-
-  # Learning settings
-  auto_learn: true  # Automatically learn from tool executions
-  learn_on_success: true  # Learn from successful tool calls
-  learn_on_failure: true  # Learn from failed tool calls
-
-  # MCP Servers
+  connection_timeout: 30
+  tool_timeout: 60
+  max_retries: 3
+  allowed_tools: []
+  blocked_tools: []
+  auto_learn: true
+  learn_on_success: true
+  learn_on_failure: true
   servers:
-    # Filesystem tools (read/write files)
-    - name: "filesystem"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-filesystem", "./data"]
-      tool_timeout: 30
-      enabled: true
-      description: "Read/write files and directories"
-      category: "filesystem"
-
-    # PowerShell execution
-    - name: "powershell"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@executeautomation/powershell-mcp-server"]
-      enabled: false
-      description: "Execute PowerShell commands"
-      category: "system"
-
-    # Web browser control (Puppeteer)
-    - name: "puppeteer"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-puppeteer"]
-      enabled: false
-      description: "Control web browser, navigate pages"
-      category: "web"
-
-    # GitHub integration
-    - name: "github"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-github"]
-      env:
-        GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
-      enabled: false
-      description: "Manage repos, issues, PRs"
-      category: "development"
-
-    # Web search (Brave)
-    - name: "brave_search"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-brave-search"]
-      env:
-        BRAVE_API_KEY: "${BRAVE_API_KEY}"
-      enabled: false
-      description: "Search the web"
-      category: "web"
-
-    # Sequential Thinking
-    - name: "sequential_thinking"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
-      enabled: false
-      description: "Step-by-step reasoning"
-      category: "reasoning"
-
-    # Memory/Notes
-    - name: "memory"
-      type: "stdio"
-      command: "npx"
-      args: ["-y", "@modelcontextprotocol/server-memory"]
-      enabled: false
-      description: "Persistent notes storage"
-      category: "utility"
-
+  - name: filesystem
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-filesystem'
+    - ./data
+    tool_timeout: 30
+    enabled: true
+    description: Read/write files and directories
+    category: filesystem
+  - name: powershell
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@executeautomation/powershell-mcp-server'
+    enabled: true
+    description: Execute PowerShell commands
+    category: system
+  - name: puppeteer
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-puppeteer'
+    enabled: false
+    description: Control web browser, navigate pages
+    category: web
+  - name: github
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-github'
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+    enabled: false
+    description: Manage repos, issues, PRs
+    category: development
+  - name: brave_search
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-brave-search'
+    env:
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+    enabled: false
+    description: Search the web
+    category: web
+  - name: sequential_thinking
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-sequential-thinking'
+    enabled: false
+    description: Step-by-step reasoning
+    category: reasoning
+  - name: memory
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-memory'
+    enabled: false
+    description: Persistent notes storage
+    category: utility
 memory:
   short_term_capacity: 20
   long_term_persistence: true
   consolidation_threshold: 10
-
 procedures:
-  path: "./data/memory/procedures.jsonl"
-
-# Procedural Memory Configuration (ACE-style)
+  path: ./data/memory/procedures.jsonl
 procedural_memory:
   enabled: true
-  persist_directory: "./data/memory/procedural"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-
-  # Learning thresholds (Phase 1)
-  promote_threshold: 3  # Helpful count needed for shared promotion
-  quarantine_threshold: 2  # Helpful count to activate quarantined bullets
-
-  # Retrieval settings (Phase 1)
-  k_left: 8  # Left brain: fewer, higher-confidence bullets
-  k_right: 16  # Right brain: more, exploratory bullets
-  k_shared: 5  # Shared memory bullets per query
-
-  # Learning configuration (Phase 2)
+  persist_directory: ./data/memory/procedural
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  promote_threshold: 3
+  quarantine_threshold: 2
+  k_left: 8
+  k_right: 16
+  k_shared: 5
   learning:
     reflection_enabled: true
     auto_curate: true
     min_insight_confidence: 0.5
     deep_reflection_llm: true
-
-  # Staging configuration (hemisphere assignment gate)
   staging:
     enabled: true
-    auto_assign: true  # Enable classifier-based auto-assignment
-    auto_assign_threshold: 0.85  # High-confidence threshold for auto-assignment
-    manual_review_threshold: 0.7  # Below this, flag as high-priority review
-
-  # Maintenance configuration (Phase 4)
+    auto_assign: true
+    auto_assign_threshold: 0.85
+    manual_review_threshold: 0.7
   maintenance:
     enabled: true
-
-    # Deduplication settings
     deduplicate_enabled: true
-    dedup_threshold: 0.90  # Cosine similarity threshold (0.0-1.0)
-    dedup_schedule: "daily"  # daily, weekly, manual
-    dedup_scope: "per_hemisphere"  # per_hemisphere, cross_hemisphere, all
+    dedup_threshold: 0.9
+    dedup_schedule: daily
+    dedup_scope: per_hemisphere
     dedup_min_cluster_size: 2
-
-    # Pruning settings
     prune_enabled: true
-    prune_policy: "balanced"  # aggressive, balanced, conservative
-    prune_schedule: "weekly"  # daily, weekly, monthly, manual
-
-    # Pruning thresholds (balanced policy)
-    prune_min_age_days: 14  # Minimum age before considering pruning
-    prune_harmful_ratio: 1.5  # harmful_count / helpful_count threshold
-    prune_quarantine_age_days: 30  # Max age for quarantined bullets
-    low_confidence_threshold: 0.2  # Very low confidence threshold
-
-    # Safety settings
+    prune_policy: balanced
+    prune_schedule: weekly
+    prune_min_age_days: 14
+    prune_harmful_ratio: 1.5
+    prune_quarantine_age_days: 30
+    low_confidence_threshold: 0.2
     backup_before_prune: true
-    backup_directory: "./data/memory/backups"
-    max_prune_per_run: 100  # Safety limit on bullets pruned per operation
-    require_confirmation_threshold: 50  # Require manual confirmation above this
+    backup_directory: ./data/memory/backups
+    max_prune_per_run: 100
+    require_confirmation_threshold: 50
     keep_prune_history: true
-    prune_history_days: 90  # How long to keep prune history
-
-    # Performance settings
-    batch_size: 100  # Process bullets in batches
-    parallel_processing: false  # Parallel processing (experimental)
-
-  # Phase 6: Cross-Hemisphere Learning
+    prune_history_days: 90
+    batch_size: 100
+    parallel_processing: false
   cross_hemisphere:
-    mode: "shared_only"  # shared_only | suggestions | teaching
+    mode: shared_only
     enabled: true
-
     suggestions:
-      enabled: false  # default OFF until Phase 6 is enabled
-      store_path: "./data/memory/suggestions.jsonl"
+      enabled: false
+      store_path: ./data/memory/suggestions.jsonl
       suggest_threshold: 2
       min_suggest_confidence: 0.65
       deliver_when_idle: true
@@ -251,25 +203,21 @@ procedural_memory:
       deliver_budget_per_tick: 1
       max_pending: 2000
       expiry_days: 14
-
     shared:
       promote_threshold: 3
       harmful_tolerance: 0
       require_cross_confirmation: false
       translate_on_promote: true
-
     conflicts:
       enabled: true
-      policy: "quarantine_and_flag"  # quarantine_and_flag | conditional_merge
-
+      policy: quarantine_and_flag
     diversity:
       enabled: true
       convergence_warning_threshold: 0.15
       throttle_on_convergence: true
-
     exploration:
       enabled: true
-      mode: "quota"  # quota | interval | drift | stuck | hybrid
+      mode: quota
       window_size: 50
       min_right_fraction: 0.25
       interval_ticks: 20
@@ -277,11 +225,8 @@ procedural_memory:
       drift_boost_multiplier: 2.0
       allow_right_critic_on_high_risk: true
       exploration_safe_override: false
-
-# Novelty Detection (Phase 2.5)
 novelty_detection:
-  novelty_decay: 0.8  # Exponential moving average decay (0.0-1.0)
-
+  novelty_decay: 0.8
 logging:
-  level: "INFO"
-  file: "./logs/bicameral_mind.log"
+  level: INFO
+  file: ./logs/bicameral_mind.log

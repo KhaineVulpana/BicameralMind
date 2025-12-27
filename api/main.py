@@ -1,6 +1,7 @@
 """FastAPI backend for BicameralMind UI"""
 import webbrowser
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -206,12 +207,65 @@ class StagedAssignRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class StagedBulletCreateRequest(BaseModel):
+    text: str
+    confidence: Optional[float] = None
+    tags: Optional[list[str]] = None
+    source_hemisphere: Optional[str] = None
+    metadata: Optional[dict] = None
+    auto_assign: Optional[bool] = None
+
+
 class ProcedureRequest(BaseModel):
     data: dict
 
 
 class EpisodeRequest(BaseModel):
     data: dict
+
+
+def _try_parse_chat_tool_command(text: str) -> Optional[dict]:
+    """Parse simple slash commands for tool usage.
+
+    Supported:
+    - /help
+    - /tool <tool_name> <json_params?>
+    - /open <path>
+    """
+    if not text:
+        return None
+    raw = text.strip()
+    if not raw.startswith("/"):
+        return None
+
+    if raw == "/help":
+        return {"type": "help"}
+
+    if raw.startswith("/open "):
+        path = raw[len("/open ") :].strip().strip('"')
+        if not path:
+            return {"type": "error", "message": "Usage: /open <path>"}
+        return {"type": "tool", "tool_name": "local.open_path", "parameters": {"path": path}}
+
+    if raw.startswith("/tool "):
+        parts = raw.split(None, 2)
+        if len(parts) < 2:
+            return {"type": "error", "message": "Usage: /tool <tool_name> <json_params?>"}
+        tool_name = parts[1].strip()
+        params_text = parts[2].strip() if len(parts) >= 3 else "{}"
+        if not params_text:
+            params_text = "{}"
+        try:
+            params = json.loads(params_text)
+        except Exception as exc:
+            return {"type": "error", "message": f"Invalid JSON params: {exc}"}
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            return {"type": "error", "message": "Tool params must be a JSON object"}
+        return {"type": "tool", "tool_name": tool_name, "parameters": params}
+
+    return {"type": "error", "message": "Unknown command. Try /help"}
 
 
 @app.get("/")
@@ -354,6 +408,53 @@ async def list_staged_bullets(limit: int = 50):
     except Exception as e:
         print(f"[ERROR] Memory staged error: {e}")
         return {"bullets": []}
+
+
+@app.post("/api/memory/staged")
+async def create_staged_bullet(request: StagedBulletCreateRequest):
+    """Create a staged bullet (manual suggestion)."""
+    if not procedural_memory:
+        return {"error": "memory_unavailable"}
+
+    text = (request.text or "").strip()
+    if not text:
+        return {"error": "text_required"}
+
+    src = (request.source_hemisphere or "left").lower().strip()
+    if src not in ("left", "right", "shared", "staging"):
+        src = "left"
+
+    confidence = request.confidence
+    try:
+        confidence = float(confidence) if confidence is not None else 0.5
+    except Exception:
+        confidence = 0.5
+    confidence = max(0.0, min(1.0, confidence))
+
+    meta = dict(request.metadata or {})
+    meta.setdefault("source", "ui_suggestion")
+    meta.setdefault("source_hemisphere", src)
+
+    bullet = procedural_memory.stage_bullet(
+        text=text,
+        source_hemisphere=Hemisphere(src) if src in ("left", "right", "staging") else Hemisphere.LEFT,
+        tags=request.tags or [],
+        confidence=confidence,
+        metadata=meta,
+        auto_assign=request.auto_assign,
+    )
+
+    return {
+        "status": "success",
+        "bullet": {
+            "id": bullet.id,
+            "text": bullet.text,
+            "status": bullet.status.value,
+            "confidence": bullet.confidence,
+            "tags": bullet.tags,
+            "metadata": bullet.metadata,
+        },
+    }
 
 
 @app.post("/api/memory/staged/{bullet_id}/assign")
@@ -500,6 +601,111 @@ async def delete_episode(episode_id: str):
 @app.post("/api/chat/message")
 async def send_message(message: ChatMessage):
     """Process chat message through bicameral mind"""
+    cmd = _try_parse_chat_tool_command(message.text)
+    if cmd:
+        if cmd["type"] == "help":
+            return {
+                "response": (
+                    "Commands:\n"
+                    "- /help\n"
+                    "- /open <path>\n"
+                    "- /tool <tool_name> <json_params?>\n\n"
+                    "Examples:\n"
+                    "- /open data\n"
+                    "- /tool cli.git {\"args\":[\"status\"]}\n"
+                    "- /tool cli.rg {\"args\":[\"-n\",\"AgenticRAG\",\"integrations/rag/agentic_rag.py\"]}"
+                ),
+                "mode": "tool",
+                "hemisphere": "system",
+                "tick_rate": 0.0,
+                "bullets_used": 0,
+            }
+
+        if cmd["type"] == "error":
+            return {
+                "response": cmd.get("message", "Invalid command"),
+                "mode": "tool",
+                "hemisphere": "system",
+                "tick_rate": 0.0,
+                "bullets_used": 0,
+            }
+
+        if cmd["type"] == "tool":
+            if not tool_executor or ToolExecutionContext is None or not tool_registry:
+                return {
+                    "response": "Tool system not available",
+                    "mode": "tool",
+                    "hemisphere": "system",
+                    "tick_rate": 0.0,
+                    "bullets_used": 0,
+                }
+
+            tool_def = tool_registry.get_tool(cmd["tool_name"], allow_disabled=True)
+            if not tool_def:
+                return {
+                    "response": f"Tool not found: {cmd['tool_name']}",
+                    "mode": "tool",
+                    "hemisphere": "system",
+                    "tick_rate": 0.0,
+                    "bullets_used": 0,
+                }
+
+            tools_cfg = (getattr(bicameral_mind, "config", None) or {}).get("tools", {}) if bicameral_mind else {}
+            allow_high_risk = bool(tools_cfg.get("allow_high_risk_chat", False))
+            if str(getattr(tool_def, "risk", "low")).lower() == "high" and not allow_high_risk:
+                return {
+                    "response": (
+                        f"Refusing to run high-risk tool via chat: {tool_def.name}\n"
+                        "Set `tools.allow_high_risk_chat: true` in config to override."
+                    ),
+                    "mode": "tool",
+                    "hemisphere": "system",
+                    "tick_rate": 0.0,
+                    "bullets_used": 0,
+                }
+
+            context = ToolExecutionContext(
+                tool_name=cmd["tool_name"],
+                parameters=cmd.get("parameters") or {},
+                hemisphere="left",
+                confidence=0.5,
+                metadata={"source": "chat_command"},
+            )
+            record = await tool_executor.execute(context)
+            try:
+                await broadcast(
+                    {
+                        "type": "tool_execution",
+                        "tool": record.context.tool_name,
+                        "success": bool(record.result.success),
+                        "duration_ms": int((record.result.execution_time or 0.0) * 1000),
+                    }
+                )
+            except Exception:
+                pass
+
+            output_text = record.result.output
+            if isinstance(output_text, (dict, list)):
+                output_text = json.dumps(output_text, indent=2)
+            elif output_text is None:
+                output_text = ""
+            else:
+                output_text = str(output_text)
+
+            if record.result.success:
+                response_text = f"[OK] {record.context.tool_name}\n{output_text}".strip()
+            else:
+                err = record.result.error or "Tool failed"
+                response_text = f"[FAIL] {record.context.tool_name}: {err}\n{output_text}".strip()
+
+            return {
+                "response": response_text,
+                "mode": "tool",
+                "hemisphere": "system",
+                "tick_rate": 0.0,
+                "bullets_used": 0,
+            }
+
     if bicameral_mind is None:
         # Test mode response
         import random
@@ -522,12 +728,18 @@ async def send_message(message: ChatMessage):
         })
 
         response_payload = response if isinstance(response, dict) else {}
+        details = {}
+        if response_payload:
+            for key in ("mode", "hemisphere", "left", "right", "rag_context"):
+                if key in response_payload:
+                    details[key] = response_payload.get(key)
         return {
             "response": response_payload.get("output", response),
             "mode": bicameral_mind.meta_controller.mode.value,
             "tick_rate": bicameral_mind.meta_controller.get_tick_rate(),
             "hemisphere": response_payload.get("hemisphere", bicameral_mind.meta_controller.get_active_hemisphere()),
-            "bullets_used": 0
+            "bullets_used": 0,
+            "details": details,
         }
     except Exception as e:
         print(f"[ERROR] Chat error: {e}")
@@ -599,6 +811,19 @@ async def execute_tool(request: ToolExecuteRequest):
         metadata=request.metadata or {},
     )
     record = await tool_executor.execute(context)
+
+    try:
+        await broadcast(
+            {
+                "type": "tool_execution",
+                "tool": record.context.tool_name,
+                "success": bool(record.result.success),
+                "duration_ms": int((record.result.execution_time or 0.0) * 1000),
+            }
+        )
+    except Exception:
+        pass
+
     return {
         "tool_name": record.context.tool_name,
         "success": record.result.success,

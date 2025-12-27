@@ -24,6 +24,7 @@ class CLIToolProvider(ToolProviderBase):
         cfg = tool.config or {}
         command = cfg.get("command")
         args = cfg.get("args", [])
+        args_param = cfg.get("args_param")
         if not command:
             return ToolResult(
                 tool_name=tool.name,
@@ -33,6 +34,17 @@ class CLIToolProvider(ToolProviderBase):
 
         cmd = [command] if isinstance(command, str) else list(command)
         cmd.extend([self._render_value(a, params) for a in (args or [])])
+
+        if args_param:
+            extra = params.get(args_param)
+            if isinstance(extra, (list, tuple)):
+                cmd.extend([str(item) for item in extra])
+            elif extra is not None:
+                return ToolResult(
+                    tool_name=tool.name,
+                    success=False,
+                    error=f"'{args_param}' must be an array of strings",
+                )
 
         stdin_mode = cfg.get("stdin_mode", "none")
         stdin_template = cfg.get("stdin_template")

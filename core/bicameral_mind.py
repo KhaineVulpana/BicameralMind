@@ -3,7 +3,8 @@ import asyncio
 from typing import Dict, Any, Optional, List
 import yaml
 from loguru import logger
-from langchain_community.llms import Ollama
+
+from core.llm_client import LLMClient
 
 from core.left_brain.agent import LeftBrain
 from core.right_brain.agent import RightBrain
@@ -39,12 +40,24 @@ class BicameralMind:
             with open(config_path, 'r') as f:
                 self.config = yaml.safe_load(f)
         
-        # Initialize LLM
-        model_config = self.config.get("model", {})
-        self.llm = Ollama(
-            model=model_config.get("name", "qwen3:14b"),
-            temperature=model_config.get("temperature", 0.7)
-        )
+        # Initialize LLM(s)
+        model_config = self.config.get("model", {}) or {}
+        slow_cfg = model_config.get("slow") or model_config
+        fast_cfg = model_config.get("fast") or {}
+
+        def _pick(cfg: Dict[str, Any]) -> Dict[str, Any]:
+            out: Dict[str, Any] = {}
+            for key in ("name", "temperature", "base_url", "max_tokens"):
+                if key in cfg:
+                    out[key] = cfg[key]
+            return out
+
+        slow_model_cfg = _pick(slow_cfg)
+        fast_model_cfg = dict(slow_model_cfg)
+        fast_model_cfg.update(_pick(fast_cfg))
+
+        self.llm = LLMClient({"model": slow_model_cfg})
+        self.llm_fast = LLMClient({"model": fast_model_cfg})
 
         # Initialize procedural memory FIRST
         self.memory = ProceduralMemory(self.config)
@@ -80,7 +93,7 @@ class BicameralMind:
         # Initialize RAG if enabled
         self.rag = None
         if self.config.get("rag", {}).get("enabled", False):
-            self.rag = AgenticRAG(self.config, self.llm)
+            self.rag = AgenticRAG(self.config, self.llm, llm_fast=self.llm_fast, llm_slow=self.llm)
         
         # State
         self.running = False
@@ -178,6 +191,9 @@ class BicameralMind:
         else:
             # Idle - default to integration
             result = await self._process_integrate(msg_content)
+
+        if isinstance(result, dict):
+            result.setdefault("rag_context", rag_context)
         
         # Add to history
         self.conversation_history.append({
