@@ -2,6 +2,17 @@ model:
   name: qwen3:14b
   temperature: 0.7
   max_tokens: 2048
+server:
+  host: 0.0.0.0
+  port: 8000
+  cors_allowed_origins:
+  - "*"
+  # Set a token for /v1 endpoints; empty disables auth.
+  auth_token: ""
+  # Allow high-risk tool calls (terminal/write) requested by v1 clients.
+  allow_high_risk_tools: false
+storage:
+  root: ./data
 bicameral:
   tick_interval: 0.5
   tick_threshold:

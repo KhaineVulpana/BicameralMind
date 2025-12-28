@@ -3,13 +3,16 @@ import webbrowser
 import asyncio
 import json
 import subprocess
+import copy
+import uuid
+from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from typing import Optional, Any, Dict, List
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -45,12 +48,14 @@ async def _startup():
     """Initialize bicameral mind on startup."""
     global bicameral_mind
     global tool_registry, tool_executor, tool_index, procedure_store, episodic_store
+    global app_config
 
     if not BICAMERAL_AVAILABLE:
         print("[INFO] Running in TEST MODE - UI only, no bicameral mind")
         bicameral_mind = None
         if load_config and initialize_tools:
             config = load_config()
+            app_config = config
             tool_registry, tool_executor, tool_index = initialize_tools(config)
             if ProcedureStore:
                 procedure_store = ProcedureStore(config)
@@ -63,6 +68,7 @@ async def _startup():
     try:
         # Load configuration
         config = load_config()
+        app_config = config
 
         # Initialize bicameral mind
         bicameral_mind = BicameralMind(config)
@@ -120,10 +126,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="BicameralMind UI", lifespan=lifespan)
 
+# Load config early for CORS/auth defaults (best-effort).
+_boot_config = load_config() if load_config else {}
+_cors_origins = (_boot_config.get("server", {}) or {}).get("cors_allowed_origins") or ["*"]
+if isinstance(_cors_origins, str):
+    _cors_origins = [_cors_origins]
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -138,6 +150,25 @@ tool_index = None
 procedure_store = None
 episodic_store = None
 active_connections: list[WebSocket] = []
+app_config: Dict[str, Any] = _boot_config if isinstance(_boot_config, dict) else {}
+
+
+@dataclass
+class V1SessionState:
+    session_id: str
+    project_id: str
+    created_at: datetime
+    last_activity: datetime
+    messages: List[Dict[str, Any]] = field(default_factory=list)
+    tool_trace: List[Dict[str, Any]] = field(default_factory=list)
+    pending_tool_calls: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    pending_tool_results: List[Dict[str, Any]] = field(default_factory=list)
+    cancel_requested: bool = False
+    latest_context: Optional[Dict[str, Any]] = None
+
+
+v1_sessions: Dict[str, V1SessionState] = {}
+v1_project_minds: Dict[str, BicameralMind] = {}
 
 # Serve static files
 static_dir = Path(__file__).parent.parent / "static"
@@ -168,6 +199,39 @@ class ChatMessage(BaseModel):
     mode: Optional[str] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+
+
+class V1SessionCreateRequest(BaseModel):
+    project_id: str
+    metadata: Optional[dict] = None
+
+
+class V1MessageRequest(BaseModel):
+    project_id: str
+    text: str
+    mode: Optional[str] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    client_context: Optional[dict] = None
+
+
+class V1ToolResultRequest(BaseModel):
+    session_id: str
+    tool_call_id: str
+    success: bool
+    output: Optional[Any] = None
+    artifacts: Optional[dict] = None
+
+
+class V1ActiveModelUpdate(BaseModel):
+    project_id: str
+    slow: str
+    fast: Optional[str] = None
+
+
+class V1ContextUpdateRequest(BaseModel):
+    project_id: str
+    context: Dict[str, Any]
 
 
 class MCPServerModel(BaseModel):
@@ -265,6 +329,105 @@ def _list_ollama_models() -> list[dict]:
     return out
 
 
+def _get_server_config() -> Dict[str, Any]:
+    cfg = app_config if isinstance(app_config, dict) else {}
+    server_cfg = cfg.get("server", {}) if isinstance(cfg, dict) else {}
+    return server_cfg if isinstance(server_cfg, dict) else {}
+
+
+def _require_v1_auth(authorization: Optional[str] = Header(None)) -> None:
+    token = str(_get_server_config().get("auth_token") or "").strip()
+    if not token:
+        return
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    provided = authorization.split(" ", 1)[1].strip()
+    if provided != token:
+        raise HTTPException(status_code=403, detail="Invalid token")
+
+
+def _make_session_id() -> str:
+    return f"sess_{uuid.uuid4().hex[:12]}"
+
+
+def _make_message_id() -> str:
+    return f"msg_{uuid.uuid4().hex[:12]}"
+
+
+def _build_details(response_payload: Dict[str, Any]) -> Dict[str, Any]:
+    details: Dict[str, Any] = {}
+    for key in (
+        "mode",
+        "hemisphere",
+        "left",
+        "right",
+        "rag_context",
+        "retrieved_bullets",
+        "tool_trace",
+        "tool_call",
+    ):
+        if key in response_payload:
+            details[key] = response_payload.get(key)
+    return details
+
+
+def _apply_project_scopes(config: Dict[str, Any], project_id: str) -> Dict[str, Any]:
+    base_root = (config.get("storage", {}) or {}).get("root", "./data")
+    base = Path(base_root) / "projects" / project_id
+
+    cfg = copy.deepcopy(config)
+    cfg.setdefault("storage", {})["root"] = str(base_root)
+
+    vec_cfg = cfg.get("vector_store", {}) or {}
+    vec_cfg["persist_directory"] = str(base / "vector_store")
+    cfg["vector_store"] = vec_cfg
+
+    episodic_cfg = cfg.get("episodic_memory", {}) or {}
+    episodic_cfg["persist_directory"] = str(base / "vector_store" / "episodes")
+    episodic_cfg["path"] = str(base / "memory" / "episodes.jsonl")
+    cfg["episodic_memory"] = episodic_cfg
+
+    procedures_cfg = cfg.get("procedures", {}) or {}
+    procedures_cfg["path"] = str(base / "memory" / "procedures.jsonl")
+    cfg["procedures"] = procedures_cfg
+
+    proc_cfg = cfg.get("procedural_memory", {}) or {}
+    proc_cfg["persist_directory"] = str(base / "memory" / "procedural")
+    cfg["procedural_memory"] = proc_cfg
+
+    return cfg
+
+
+def _get_project_mind(project_id: str) -> Optional[BicameralMind]:
+    if not BICAMERAL_AVAILABLE:
+        return None
+    if project_id in v1_project_minds:
+        return v1_project_minds[project_id]
+    base_config = app_config if isinstance(app_config, dict) else {}
+    scoped = _apply_project_scopes(base_config, project_id)
+    project_cfg = (base_config.get("projects", {}) or {}).get(project_id, {}) if isinstance(base_config, dict) else {}
+    if project_cfg and isinstance(project_cfg, dict) and project_cfg.get("model"):
+        scoped["model"] = project_cfg.get("model")
+    mind = BicameralMind(scoped)
+    v1_project_minds[project_id] = mind
+    return mind
+
+
+async def _process_v1_message(text: str, project_id: str) -> Dict[str, Any]:
+    """Process a chat message through BicameralMind or return a test response."""
+    if not BICAMERAL_AVAILABLE:
+        return {
+            "output": f"[TEST MODE] You said: '{text}' - This is a test response. The full bicameral mind is not initialized yet.",
+            "hemisphere": "none",
+            "mode": "test",
+        }
+    mind = _get_project_mind(project_id) if project_id else bicameral_mind
+    response = await mind.process(text) if mind else {"output": text, "hemisphere": "none", "mode": "test"}
+    if isinstance(response, dict):
+        return response
+    return {"output": str(response), "hemisphere": "none", "mode": "unknown"}
+
+
 def _try_parse_chat_tool_command(text: str) -> Optional[dict]:
     """Parse simple slash commands for tool usage.
 
@@ -307,6 +470,59 @@ def _try_parse_chat_tool_command(text: str) -> Optional[dict]:
         return {"type": "tool", "tool_name": tool_name, "parameters": params}
 
     return {"type": "error", "message": "Unknown command. Try /help"}
+
+
+def _infer_tool_risk(tool_name: str) -> str:
+    lowered = (tool_name or "").lower()
+    high_markers = ["write", "delete", "remove", "rm", "format", "shell", "exec", "terminal", "run", "apply"]
+    if any(marker in lowered for marker in high_markers):
+        return "high"
+    return "low"
+
+
+def _extract_tool_call(text: str) -> Optional[Dict[str, Any]]:
+    cmd = _try_parse_chat_tool_command(text)
+    if not cmd or cmd.get("type") != "tool":
+        return None
+    tool_name = cmd.get("tool_name")
+    params = cmd.get("parameters") or {}
+    tool_call_id = f"tool_{uuid.uuid4().hex[:10]}"
+    return {
+        "tool_call_id": tool_call_id,
+        "name": tool_name,
+        "args": params,
+        "risk": _infer_tool_risk(tool_name),
+        "requires_confirmation": True,
+    }
+
+
+def _split_tokens(text: str) -> List[str]:
+    if not text:
+        return []
+    parts = text.split(" ")
+    tokens: List[str] = []
+    for idx, part in enumerate(parts):
+        if idx < len(parts) - 1:
+            tokens.append(part + " ")
+        else:
+            tokens.append(part)
+    return tokens
+
+
+def _sse_event(event: str, data: Any) -> str:
+    payload = data
+    if not isinstance(data, str):
+        payload = json.dumps(data, ensure_ascii=True)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+def _format_context_block(context: Optional[Dict[str, Any]]) -> str:
+    if not context:
+        return ""
+    try:
+        return f"CLIENT_CONTEXT:\n{json.dumps(context, indent=2)}\n\n"
+    except Exception:
+        return f"CLIENT_CONTEXT:\n{context}\n\n"
 
 
 @app.get("/")
@@ -1349,6 +1565,295 @@ async def set_active_models(update: ActiveModelUpdate):
             return {"error": "runtime_update_failed", "message": str(exc)}
 
     return {"status": "success", "slow": slow, "fast": fast}
+
+
+# -----------------------------
+# V1 API (for VS Code extension)
+# -----------------------------
+
+
+@app.post("/v1/sessions", dependencies=[Depends(_require_v1_auth)])
+async def v1_create_session(request: V1SessionCreateRequest):
+    """Create a new chat session."""
+    session_id = _make_session_id()
+    now = datetime.utcnow()
+    v1_sessions[session_id] = V1SessionState(
+        session_id=session_id,
+        project_id=request.project_id,
+        created_at=now,
+        last_activity=now,
+    )
+    return {"session_id": session_id}
+
+
+@app.get("/v1/sessions/{session_id}", dependencies=[Depends(_require_v1_auth)])
+async def v1_get_session(session_id: str):
+    session = v1_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {
+        "session_id": session.session_id,
+        "project_id": session.project_id,
+        "created_at": session.created_at.isoformat(),
+        "last_activity": session.last_activity.isoformat(),
+        "messages": session.messages,
+        "tool_trace": session.tool_trace,
+    }
+
+
+@app.post("/v1/sessions/{session_id}/context", dependencies=[Depends(_require_v1_auth)])
+async def v1_update_context(session_id: str, request: V1ContextUpdateRequest):
+    session = v1_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if request.project_id != session.project_id:
+        raise HTTPException(status_code=400, detail="project_id mismatch for session")
+    session.latest_context = request.context
+    session.last_activity = datetime.utcnow()
+    return {"status": "ok"}
+
+
+@app.post("/v1/sessions/{session_id}/messages", dependencies=[Depends(_require_v1_auth)])
+async def v1_send_message(session_id: str, request: V1MessageRequest):
+    """Send a message and return a full response (non-stream)."""
+    session = v1_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if request.project_id != session.project_id:
+        raise HTTPException(status_code=400, detail="project_id mismatch for session")
+
+    tool_call = _extract_tool_call(request.text)
+    if tool_call:
+        server_cfg = _get_server_config()
+        allow_high_risk = bool(server_cfg.get("allow_high_risk_tools", False))
+        if tool_call["risk"] == "high" and not allow_high_risk:
+            return {"message_id": _make_message_id(), "final": "Tool request blocked (high-risk).", "details": {"tool_call": tool_call}}
+        session.pending_tool_calls[tool_call["tool_call_id"]] = tool_call
+        print(f"[V1] Tool proposal: {tool_call['name']} ({tool_call['tool_call_id']})")
+        return {
+            "message_id": _make_message_id(),
+            "final": "Tool requested. Waiting for tool result.",
+            "details": {"tool_call": tool_call},
+        }
+
+    if request.client_context is not None:
+        session.latest_context = request.client_context
+    context_block = _format_context_block(request.client_context or session.latest_context)
+    enriched_text = f"{context_block}{request.text}"
+    if session.pending_tool_results:
+        tool_block = json.dumps(session.pending_tool_results[-3:], indent=2)
+        enriched_text = f"{context_block}{request.text}\n\nTOOL_RESULTS:\n{tool_block}"
+        session.pending_tool_results = []
+
+    response_payload = await _process_v1_message(enriched_text, request.project_id)
+    final = response_payload.get("output", "")
+    details = _build_details(response_payload)
+    if session.tool_trace:
+        details["tool_trace"] = session.tool_trace[-25:]
+
+    message_id = _make_message_id()
+    now = datetime.utcnow()
+    session.messages.append(
+        {
+            "message_id": message_id,
+            "text": request.text,
+            "final": final,
+            "details": details,
+            "created_at": now.isoformat(),
+        }
+    )
+    session.last_activity = now
+
+    return {"message_id": message_id, "final": final, "details": details}
+
+
+@app.get("/v1/sessions/{session_id}/events", dependencies=[Depends(_require_v1_auth)])
+async def v1_stream_events(
+    session_id: str,
+    text: str,
+    project_id: str,
+    mode: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+):
+    """Stream a response using Server-Sent Events (SSE)."""
+    session = v1_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if project_id != session.project_id:
+        raise HTTPException(status_code=400, detail="project_id mismatch for session")
+
+    async def event_stream():
+        try:
+            session.cancel_requested = False
+            tool_call = _extract_tool_call(text)
+            if tool_call:
+                server_cfg = _get_server_config()
+                allow_high_risk = bool(server_cfg.get("allow_high_risk_tools", False))
+                if tool_call["risk"] == "high" and not allow_high_risk:
+                    yield _sse_event("error", {"error": "Tool request blocked (high-risk)."})
+                    return
+                session.pending_tool_calls[tool_call["tool_call_id"]] = tool_call
+                print(f"[V1] Tool proposal: {tool_call['name']} ({tool_call['tool_call_id']})")
+                yield _sse_event("tool_call", tool_call)
+                yield _sse_event("final", "Tool requested. Waiting for tool result.")
+                return
+
+            context_block = _format_context_block(session.latest_context)
+            enriched_text = f"{context_block}{text}"
+            if session.pending_tool_results:
+                enriched_text = (
+                    f"{context_block}{text}\n\nTOOL_RESULTS:\n"
+                    f"{json.dumps(session.pending_tool_results[-3:], indent=2)}"
+                )
+                session.pending_tool_results = []
+
+            response_payload = await _process_v1_message(enriched_text, project_id)
+            final = response_payload.get("output", "")
+            details = _build_details(response_payload)
+            if session.tool_trace:
+                details["tool_trace"] = session.tool_trace[-25:]
+
+            for token in _split_tokens(final):
+                if session.cancel_requested:
+                    yield _sse_event("error", {"error": "Stream cancelled"})
+                    return
+                yield _sse_event("token", token)
+                await asyncio.sleep(0)
+            yield _sse_event("final", final)
+            yield _sse_event("details", details)
+
+            message_id = _make_message_id()
+            now = datetime.utcnow()
+            session.messages.append(
+                {
+                    "message_id": message_id,
+                    "text": text,
+                    "final": final,
+                    "details": details,
+                    "created_at": now.isoformat(),
+                }
+            )
+            session.last_activity = now
+        except Exception as exc:
+            yield _sse_event("error", {"error": str(exc)})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@app.post("/v1/sessions/{session_id}/cancel", dependencies=[Depends(_require_v1_auth)])
+async def v1_cancel_session(session_id: str):
+    session = v1_sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    session.cancel_requested = True
+    return {"status": "cancelled"}
+
+
+@app.post("/v1/tool_results", dependencies=[Depends(_require_v1_auth)])
+async def v1_tool_results(request: V1ToolResultRequest):
+    session = v1_sessions.get(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if request.tool_call_id in session.pending_tool_calls:
+        session.pending_tool_calls.pop(request.tool_call_id, None)
+    session.tool_trace.append(
+        {
+            "tool_call_id": request.tool_call_id,
+            "success": bool(request.success),
+            "output": request.output,
+            "artifacts": request.artifacts or {},
+            "created_at": datetime.utcnow().isoformat(),
+        }
+    )
+    session.pending_tool_results.append(
+        {
+            "tool_call_id": request.tool_call_id,
+            "success": bool(request.success),
+            "output": request.output,
+        }
+    )
+    session.last_activity = datetime.utcnow()
+    print(f"[V1] Tool result: {request.tool_call_id} success={request.success}")
+    return {"status": "ok"}
+
+
+@app.get("/v1/models/ollama", dependencies=[Depends(_require_v1_auth)])
+async def v1_list_ollama_models():
+    """List locally available Ollama models."""
+    return {"models": _list_ollama_models()}
+
+
+@app.get("/v1/models/active", dependencies=[Depends(_require_v1_auth)])
+async def v1_get_active_models(project_id: Optional[str] = None):
+    """Return active model configuration for a project (fallback to global)."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    config = load_config(str(config_file)) if load_config else {}
+
+    model_cfg = (config.get("model", {}) or {})
+    if project_id:
+        project_cfg = (config.get("projects", {}) or {}).get(project_id, {}) or {}
+        model_cfg = (project_cfg.get("model") or model_cfg)
+
+    slow_cfg = model_cfg.get("slow") or model_cfg
+    fast_cfg = model_cfg.get("fast") or {}
+    return {
+        "slow": (slow_cfg or {}).get("name", ""),
+        "fast": (fast_cfg or {}).get("name", ""),
+    }
+
+
+@app.post("/v1/models/active", dependencies=[Depends(_require_v1_auth)])
+async def v1_set_active_models(update: V1ActiveModelUpdate):
+    """Set active model(s) per project (fallback to global)."""
+    project_id = (update.project_id or "").strip()
+    slow = (update.slow or "").strip()
+    fast = (update.fast or "").strip() if update.fast is not None else ""
+    if not project_id:
+        return {"error": "project_id_required"}
+    if not slow:
+        return {"error": "slow_required"}
+
+    available = {m.get("name") for m in _list_ollama_models() if m.get("name")}
+    if available and slow not in available:
+        return {"error": "slow_not_available", "available": sorted(available)}
+    if fast and available and fast not in available:
+        return {"error": "fast_not_available", "available": sorted(available)}
+
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    config = load_config(str(config_file)) if load_config else {}
+    config.setdefault("projects", {})
+    project_cfg = config["projects"].setdefault(project_id, {})
+
+    model_cfg = project_cfg.get("model") or {}
+    if "slow" not in model_cfg and "name" in model_cfg:
+        model_cfg = {"slow": dict(model_cfg)}
+    model_cfg = dict(model_cfg)
+
+    slow_cfg = model_cfg.get("slow") or {}
+    slow_cfg["name"] = slow
+    model_cfg["slow"] = slow_cfg
+
+    if fast:
+        fast_cfg = model_cfg.get("fast") or {}
+        fast_cfg["name"] = fast
+        model_cfg["fast"] = fast_cfg
+    else:
+        model_cfg.pop("fast", None)
+
+    project_cfg["model"] = model_cfg
+    config["projects"][project_id] = project_cfg
+
+    if save_config:
+        save_config(config, str(config_file))
+
+    if bicameral_mind and hasattr(bicameral_mind, "set_models"):
+        try:
+            bicameral_mind.set_models(slow, fast_name=fast or None)
+        except Exception as exc:
+            return {"error": "runtime_update_failed", "message": str(exc)}
+
+    return {"status": "success", "slow": slow, "fast": fast, "project_id": project_id}
 
 
 @app.websocket("/ws")
