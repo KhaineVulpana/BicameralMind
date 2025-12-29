@@ -282,6 +282,88 @@ async function fetchTools() {
     }
 }
 
+async function fetchHighRiskChatSetting() {
+    const toggle = document.getElementById('toggle-high-risk-chat');
+    const status = document.getElementById('high-risk-status');
+    if (!toggle || !status) return;
+
+    try {
+        const response = await fetch('/api/tools/high_risk');
+        const data = await response.json();
+        const allow = !!data.allow_high_risk_chat;
+        toggle.checked = allow;
+        status.textContent = allow ? 'ENABLED' : 'DISABLED';
+    } catch (error) {
+        console.error('Failed to fetch high-risk chat tools status:', error);
+        status.textContent = 'ERROR';
+    }
+}
+
+async function setHighRiskChatSetting(allow) {
+    const toggle = document.getElementById('toggle-high-risk-chat');
+    if (!toggle) return;
+    toggle.disabled = true;
+    try {
+        const response = await fetch('/api/tools/high_risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allow: !!allow })
+        });
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            throw new Error(data.message || `HTTP ${response.status}`);
+        }
+    } catch (error) {
+        alert(`Failed to update chat tool access: ${error.message || error}`);
+    } finally {
+        toggle.disabled = false;
+        fetchHighRiskChatSetting();
+    }
+}
+
+async function fetchRagStatus() {
+    const countEl = document.getElementById('rag-doc-count');
+    if (!countEl) return;
+    try {
+        const response = await fetch('/api/rag/status');
+        const data = await response.json();
+        if (!data.enabled) {
+            countEl.textContent = 'DISABLED';
+        } else {
+            countEl.textContent = `${data.documents || 0}`;
+        }
+    } catch (error) {
+        console.error('Failed to fetch RAG status:', error);
+        countEl.textContent = 'ERROR';
+    }
+}
+
+async function seedRag() {
+    const seedBtn = document.getElementById('rag-seed-btn');
+    if (seedBtn) seedBtn.disabled = true;
+    try {
+        const response = await fetch('/api/rag/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            throw new Error(data.message || `HTTP ${response.status}`);
+        }
+        if (data.status === 'empty') {
+            alert('No seed docs found to ingest.');
+        } else {
+            alert(`Seeded RAG with ${data.documents_added || 0} docs.`);
+        }
+        fetchRagStatus();
+    } catch (error) {
+        alert(`Failed to seed RAG: ${error.message || error}`);
+    } finally {
+        if (seedBtn) seedBtn.disabled = false;
+    }
+}
+
 let toolStatsRefreshTimer = null;
 function scheduleToolStatsRefresh() {
     if (toolStatsRefreshTimer) return;
@@ -797,7 +879,7 @@ async function sendMessage() {
             tick: data.tick_rate,
             hemisphere: data.hemisphere,
             bullets: data.bullets_used
-        });
+        }, data.details);
         renderChatTrace(data.details);
         renderChatContext(data.details);
         pushSuggestionsFromDetails(data.details);
@@ -821,7 +903,7 @@ async function sendMessage() {
     }
 }
 
-function addMessage(type, text, meta = null) {
+function addMessage(type, text, meta = null, details = null) {
     const messagesDiv = document.getElementById('chat-messages');
     const messageDiv = document.createElement('div');
     const normalized = (type || '').toLowerCase();
@@ -857,10 +939,38 @@ function addMessage(type, text, meta = null) {
         metaHtml = `<div class="meta">Mode: ${mode} | Tick: ${tick} | Hemisphere: ${hemisphere} | Bullets: ${meta.bullets || 0}</div>`;
     }
 
+    let detailHtml = '';
+    if (details && (details.left || details.right)) {
+        const blocks = [];
+        if (details.left) {
+            blocks.push(`
+                <div class="detail-block">
+                    <div class="detail-title">Left Brain</div>
+                    <pre>${escapeHtml(String(details.left))}</pre>
+                </div>
+            `);
+        }
+        if (details.right) {
+            blocks.push(`
+                <div class="detail-block">
+                    <div class="detail-title">Right Brain</div>
+                    <pre>${escapeHtml(String(details.right))}</pre>
+                </div>
+            `);
+        }
+        detailHtml = `
+            <details class="message-details">
+                <summary>View agent responses</summary>
+                ${blocks.join('')}
+            </details>
+        `;
+    }
+
     messageDiv.innerHTML = `
         <div class="message-meta">${label}</div>
         <div class="text">${escapeHtml(text)}</div>
         ${metaHtml}
+        ${detailHtml}
     `;
 
     messagesDiv.appendChild(messageDiv);
@@ -963,9 +1073,9 @@ function extractCandidateBullets(text) {
 
     for (const line of lines) {
         if (candidates.length >= 6) break;
-        const looksLikeBullet = /^([-*]\\s+|\\d+\\.\\s+|\\d+\\)\\s+)/.test(line);
+        const looksLikeBullet = /^([-*]\s+|\d+\.\s+|\d+\)\s+)/.test(line);
         if (!looksLikeBullet) continue;
-        const cleaned = line.replace(/^([-*]\\s+|\\d+\\.\\s+|\\d+\\)\\s+)/, '').trim();
+        const cleaned = line.replace(/^([-*]\s+|\d+\.\s+|\d+\)\s+)/, '').trim();
         if (cleaned.length >= 12 && cleaned.length <= 220) {
             candidates.push(cleaned);
         }
@@ -973,7 +1083,7 @@ function extractCandidateBullets(text) {
 
     if (candidates.length) return candidates;
 
-    const raw = String(text).replace(/\\s+/g, ' ').trim();
+    const raw = String(text).replace(/\s+/g, ' ').trim();
     if (!raw) return [];
     const parts = raw.split(/(?<=[.!?])\\s+/).slice(0, 2);
     const fallback = parts.join(' ').trim();
@@ -1123,8 +1233,7 @@ function openMCPConfig() {
     window.open('/static/mcp-config.html', '_blank', 'noopener,noreferrer');
 }
 
-// Initialize
-window.addEventListener('DOMContentLoaded', () => {
+function bootUi() {
     initTabs();
     initModelPickers();
     connectWebSocket();
@@ -1135,6 +1244,8 @@ window.addEventListener('DOMContentLoaded', () => {
     fetchTools();
     fetchToolStats();
     fetchStaged();
+    fetchHighRiskChatSetting();
+    fetchRagStatus();
     updateAnalytics();
 
     setInterval(fetchStatus, 5000);
@@ -1175,6 +1286,18 @@ window.addEventListener('DOMContentLoaded', () => {
     const addForm = document.getElementById('mcp-add-form');
     if (addForm) addForm.addEventListener('submit', addMCPServer);
 
+    const highRiskToggle = document.getElementById('toggle-high-risk-chat');
+    if (highRiskToggle) {
+        highRiskToggle.addEventListener('change', () => setHighRiskChatSetting(highRiskToggle.checked));
+    }
+    const refreshHighRiskBtn = document.getElementById('refresh-high-risk-chat');
+    if (refreshHighRiskBtn) refreshHighRiskBtn.addEventListener('click', fetchHighRiskChatSetting);
+
+    const ragSeedBtn = document.getElementById('rag-seed-btn');
+    if (ragSeedBtn) ragSeedBtn.addEventListener('click', seedRag);
+    const ragStatusBtn = document.getElementById('rag-status-btn');
+    if (ragStatusBtn) ragStatusBtn.addEventListener('click', fetchRagStatus);
+
     document.getElementById('send-btn').addEventListener('click', sendMessage);
     const clearBtn = document.getElementById('chat-clear');
     if (clearBtn) clearBtn.addEventListener('click', clearChat);
@@ -1189,4 +1312,11 @@ window.addEventListener('DOMContentLoaded', () => {
             sendMessage();
         }
     });
-});
+}
+
+// Initialize
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', bootUi);
+} else {
+    bootUi();
+}

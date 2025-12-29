@@ -675,6 +675,47 @@ body::before {
     margin-top: 8px;
 }
 
+.message-details {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(10, 16, 24, 0.7);
+    padding: 8px 10px;
+}
+
+.message-details summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--ink-2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.message-details .detail-block {
+    margin-top: 10px;
+}
+
+.message-details .detail-title {
+    font-size: 11px;
+    color: var(--ink-3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+
+.message-details pre {
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: rgba(10, 16, 24, 0.85);
+    color: var(--ink-1);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
 .chat-input {
     margin-top: 12px;
     display: flex;
@@ -915,6 +956,23 @@ body::before {
     gap: 6px;
     font-size: 12px;
     color: var(--ink-2);
+}
+
+.config-status {
+    font-size: 12px;
+    color: var(--ink-3);
+}
+
+.config-status strong {
+    color: var(--ink-1);
+    font-family: var(--font-mono);
+}
+
+.config-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .config-form input,

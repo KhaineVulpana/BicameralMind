@@ -463,6 +463,42 @@
                     <div class="panel mcp-tools">
                         <div class="panel-header">
                             <div>
+                                <h2>Chat Tool Access</h2>
+                                <p class="panel-subtitle">Allow chat commands to run high-risk tools.</p>
+                            </div>
+                        </div>
+                        <div class="config-form">
+                            <label class="toggle">
+                                <input type="checkbox" id="toggle-high-risk-chat">
+                                <span>Allow high-risk chat tools</span>
+                            </label>
+                            <div class="config-status">Status: <strong id="high-risk-status">-</strong></div>
+                            <div class="config-actions">
+                                <button class="ghost-btn" id="refresh-high-risk-chat" type="button">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-tools">
+                        <div class="panel-header">
+                            <div>
+                                <h2>RAG Seed</h2>
+                                <p class="panel-subtitle">Load curated docs into the knowledge store.</p>
+                            </div>
+                        </div>
+                        <div class="config-form">
+                            <div class="config-status">Seed source: <code>docs/rag_seed</code></div>
+                            <div class="config-status">Indexed docs: <strong id="rag-doc-count">-</strong></div>
+                            <div class="config-actions">
+                                <button class="primary-btn" id="rag-seed-btn" type="button">Seed RAG</button>
+                                <button class="ghost-btn" id="rag-status-btn" type="button">Refresh</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel mcp-tools">
+                        <div class="panel-header">
+                            <div>
                                 <h2>Tool Registry</h2>
                                 <p class="panel-subtitle">Available tools, policies, and learning impact.</p>
                             </div>

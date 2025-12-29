@@ -21,12 +21,16 @@ class AgenticRAG:
         config: Dict[str, Any],
         llm_client,
         *,
+        llm_fast=None,
+        llm_slow=None,
         vectorstore=None,
         splitter: Optional[RecursiveCharacterTextSplitter] = None,
         embeddings=None,
     ):
         self.config = config.get("rag", {}) if isinstance(config, dict) else {}
         self.llm = llm_client
+        self.llm_fast = llm_fast or llm_client
+        self.llm_slow = llm_slow or llm_client
 
         # Vector store setup (allow injection for tests)
         if vectorstore is not None:
@@ -58,8 +62,14 @@ class AgenticRAG:
         
         if mode == "single":
             return await self._single_pass_retrieve(query)
-        else:
-            return await self._agentic_retrieve(query)
+
+        if self._should_skip_agentic():
+            result = await self._single_pass_retrieve(query)
+            result["skipped_agentic"] = True
+            result["skip_reason"] = "insufficient_docs"
+            return result
+
+        return await self._agentic_retrieve(query)
     
     async def _single_pass_retrieve(self, query: str) -> Dict[str, Any]:
         """Traditional RAG: single retrieval pass"""
@@ -75,7 +85,8 @@ class AgenticRAG:
         context = "\n\n".join([doc.page_content for doc in docs])
         
         prompt = self._format_synthesis_prompt(query, context)
-        response = await self.llm.ainvoke(prompt)
+        llm = self.llm_slow or self.llm
+        response = await llm.ainvoke(prompt)
         
         return {
             "answer": response.content if hasattr(response, 'content') else str(response),
@@ -130,7 +141,8 @@ class AgenticRAG:
         # Synthesize final answer
         final_context = "\n\n".join([doc.page_content for doc in all_retrieved])
         prompt = self._format_synthesis_prompt(query, final_context)
-        response = await self.llm.ainvoke(prompt)
+        llm = self.llm_slow or self.llm
+        response = await llm.ainvoke(prompt)
         
         return {
             "answer": response.content if hasattr(response, 'content') else str(response),
@@ -143,7 +155,8 @@ class AgenticRAG:
         """Assess if retrieved context sufficiently covers the query"""
         
         prompt = self._format_coverage_prompt(query, context)
-        response = await self.llm.ainvoke(prompt)
+        llm = self.llm_fast or self.llm
+        response = await llm.ainvoke(prompt)
         result = response.content if hasattr(response, "content") else str(response)
 
         sufficient = "SUFFICIENT" in result and "INSUFFICIENT" not in result.upper()
@@ -162,7 +175,8 @@ class AgenticRAG:
             retrieved=context[:300],
             coverage=coverage.get("reason", ""),
         )
-        response = await self.llm.ainvoke(prompt)
+        llm = self.llm_fast or self.llm
+        response = await llm.ainvoke(prompt)
         result = response.content if hasattr(response, "content") else str(response)
         
         if "SUFFICIENT" in result:
@@ -204,6 +218,54 @@ class AgenticRAG:
         self.vectorstore.add_texts(splits, metadatas=metadatas)
 
         logger.info(f"Added {len(splits)} chunks to knowledge base")
+
+    def _vectorstore_count(self) -> Optional[int]:
+        store = self.vectorstore
+        if store is None:
+            return 0
+        if hasattr(store, "_collection"):
+            try:
+                return int(store._collection.count())
+            except Exception:
+                pass
+        if hasattr(store, "index") and hasattr(store.index, "ntotal"):
+            try:
+                return int(store.index.ntotal)
+            except Exception:
+                pass
+        if hasattr(store, "index_to_docstore_id"):
+            try:
+                return len(store.index_to_docstore_id)
+            except Exception:
+                pass
+        try:
+            return len(store)
+        except Exception:
+            return None
+
+    def _should_skip_agentic(self) -> bool:
+        count = self._vectorstore_count()
+        if count is None:
+            return False
+
+        top_k = int(self.config.get("top_k", 5) or 5)
+        min_docs = self.config.get("min_docs_for_agentic")
+        if min_docs is None:
+            min_docs = max(top_k * 2, top_k + 1)
+        try:
+            min_docs = int(min_docs)
+        except (TypeError, ValueError):
+            min_docs = max(top_k * 2, top_k + 1)
+
+        if count < min_docs:
+            logger.info(
+                "Agentic RAG: skipping iterative retrieval (docs=%s < min_docs_for_agentic=%s)",
+                count,
+                min_docs,
+            )
+            return True
+
+        return False
 
     # Prompt helpers
     def _format_synthesis_prompt(self, query: str, context: str) -> str:

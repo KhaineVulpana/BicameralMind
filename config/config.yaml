@@ -66,6 +66,7 @@ episodic_memory:
   top_k: 5
 tools:
   enabled: true
+  allow_high_risk_chat: false
   registry_path: ./data/tools/tool_registry.json
   index_persist_directory: ./data/vector_store/tools
   index_collection: tool_registry

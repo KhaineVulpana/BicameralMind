@@ -15,10 +15,17 @@ if ! command -v ollama &> /dev/null; then
 fi
 echo "OK Ollama installed"
 
+# Activate virtual environment if it exists
+if [ -d ".venv" ]; then
+    echo ""
+    echo "Activating virtual environment..."
+    source .venv/Scripts/activate || source .venv/bin/activate
+fi
+
 # Install Python dependencies
 echo ""
 echo "Installing Python dependencies..."
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 
 # Create data directories
 echo ""

@@ -1,5 +1,6 @@
 """FastAPI backend for BicameralMind UI"""
 import webbrowser
+import mimetypes
 import asyncio
 import json
 import subprocess
@@ -170,6 +171,10 @@ class V1SessionState:
 v1_sessions: Dict[str, V1SessionState] = {}
 v1_project_minds: Dict[str, BicameralMind] = {}
 
+# Ensure correct static MIME types (Windows registry mappings can be wrong).
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+
 # Serve static files
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
@@ -265,6 +270,14 @@ class ToolExecuteRequest(BaseModel):
 
 class ToolRegisterRequest(BaseModel):
     definition: dict
+
+
+class HighRiskChatUpdate(BaseModel):
+    allow: bool
+
+
+class RAGSeedRequest(BaseModel):
+    paths: Optional[list[str]] = None
 
 
 class StagedAssignRequest(BaseModel):
@@ -523,6 +536,68 @@ def _format_context_block(context: Optional[Dict[str, Any]]) -> str:
         return f"CLIENT_CONTEXT:\n{json.dumps(context, indent=2)}\n\n"
     except Exception:
         return f"CLIENT_CONTEXT:\n{context}\n\n"
+
+
+def _resolve_repo_paths(paths: List[str]) -> List[Path]:
+    root = Path(__file__).parent.parent.resolve()
+    resolved: List[Path] = []
+    for raw in paths:
+        if not raw:
+            continue
+        candidate = (root / raw).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        resolved.append(candidate)
+    return resolved
+
+
+def _collect_rag_seed_documents(paths: List[Path]) -> tuple[list[str], list[dict], list[str]]:
+    allowed_exts = {".md", ".txt", ".rst"}
+    max_bytes = 300_000
+    root = Path(__file__).parent.parent.resolve()
+
+    docs: list[str] = []
+    metas: list[dict] = []
+    skipped: list[str] = []
+    seen: set[Path] = set()
+
+    def add_file(path: Path) -> None:
+        if path in seen:
+            return
+        seen.add(path)
+        if path.suffix.lower() not in allowed_exts:
+            skipped.append(str(path.relative_to(root)))
+            return
+        try:
+            data = path.read_bytes()
+        except Exception:
+            skipped.append(str(path.relative_to(root)))
+            return
+        if not data:
+            return
+        if len(data) > max_bytes:
+            skipped.append(str(path.relative_to(root)))
+            return
+        text = data.decode("utf-8", errors="ignore").strip()
+        if not text:
+            return
+        rel = str(path.relative_to(root))
+        docs.append(f"SOURCE: {rel}\n\n{text}")
+        metas.append({"source_path": rel, "kind": "rag_seed"})
+
+    for path in paths:
+        if path.is_dir():
+            for file_path in path.rglob("*"):
+                if file_path.is_file():
+                    add_file(file_path)
+        elif path.is_file():
+            add_file(path)
+        else:
+            skipped.append(str(path))
+
+    return docs, metas, skipped
 
 
 @app.get("/")
@@ -1040,6 +1115,56 @@ async def send_message(message: ChatMessage):
         }
 
 
+@app.get("/api/rag/status")
+async def get_rag_status():
+    """Get RAG availability and document count."""
+    if not bicameral_mind or not getattr(bicameral_mind, "rag", None):
+        return {"enabled": False, "documents": 0}
+    rag_cfg = (getattr(bicameral_mind, "config", None) or {}).get("rag", {}) if bicameral_mind else {}
+    if not (rag_cfg or {}).get("enabled", False):
+        return {"enabled": False, "documents": 0}
+    count = None
+    rag = bicameral_mind.rag
+    if hasattr(rag, "_vectorstore_count"):
+        try:
+            count = rag._vectorstore_count()
+        except Exception:
+            count = None
+    return {"enabled": True, "documents": int(count or 0)}
+
+
+@app.post("/api/rag/seed")
+async def seed_rag(request: Optional[RAGSeedRequest] = None):
+    """Seed the RAG vector store with curated docs."""
+    if not bicameral_mind or not getattr(bicameral_mind, "rag", None):
+        return {"status": "error", "message": "rag_unavailable"}
+    rag_cfg = (getattr(bicameral_mind, "config", None) or {}).get("rag", {}) if bicameral_mind else {}
+    if not (rag_cfg or {}).get("enabled", False):
+        return {"status": "error", "message": "rag_disabled"}
+
+    root = Path(__file__).parent.parent.resolve()
+    default_seed_dir = root / "docs" / "rag_seed"
+    request_paths = (request.paths or []) if request else []
+    if not request_paths and default_seed_dir.exists():
+        request_paths = [str(default_seed_dir.relative_to(root))]
+
+    if not request_paths:
+        return {"status": "error", "message": "no_seed_paths"}
+
+    resolved = _resolve_repo_paths(request_paths)
+    docs, metas, skipped = _collect_rag_seed_documents(resolved)
+    if not docs:
+        return {"status": "empty", "documents_added": 0, "skipped": skipped}
+
+    bicameral_mind.rag.add_documents(docs, metadata=metas)
+    return {
+        "status": "success",
+        "documents_added": len(docs),
+        "sources": [m.get("source_path") for m in metas],
+        "skipped": skipped,
+    }
+
+
 @app.get("/api/tools")
 async def list_tools(enabled_only: bool = True, provider: Optional[str] = None):
     """List tools from the registry."""
@@ -1049,6 +1174,41 @@ async def list_tools(enabled_only: bool = True, provider: Optional[str] = None):
     if provider:
         tools = [t for t in tools if str(getattr(t.provider, "value", t.provider)) == provider]
     return {"tools": [_tool_to_dict(tool) for tool in tools]}
+
+
+@app.get("/api/tools/high_risk")
+async def get_high_risk_chat_tools():
+    """Get current high-risk chat tool setting."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    try:
+        config = load_config(str(config_file)) if load_config else {}
+        tools_cfg = config.get("tools", {}) if isinstance(config, dict) else {}
+        allow = bool((tools_cfg or {}).get("allow_high_risk_chat", False))
+        return {"allow_high_risk_chat": allow}
+    except Exception as e:
+        print(f"[ERROR] High risk tool status error: {e}")
+        return {"allow_high_risk_chat": False, "error": str(e)}
+
+
+@app.post("/api/tools/high_risk")
+async def set_high_risk_chat_tools(update: HighRiskChatUpdate):
+    """Enable or disable high-risk chat tools."""
+    config_file = Path(__file__).parent.parent / "config" / "config.yaml"
+    try:
+        config = load_config(str(config_file)) if load_config else {}
+        if not isinstance(config, dict):
+            config = {}
+        config.setdefault("tools", {})
+        config["tools"]["allow_high_risk_chat"] = bool(update.allow)
+        if save_config:
+            save_config(config, str(config_file))
+        if bicameral_mind and isinstance(getattr(bicameral_mind, "config", None), dict):
+            bicameral_mind.config.setdefault("tools", {})
+            bicameral_mind.config["tools"]["allow_high_risk_chat"] = bool(update.allow)
+        return {"status": "success", "allow_high_risk_chat": bool(update.allow)}
+    except Exception as e:
+        print(f"[ERROR] High risk tool update error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/api/tools/{tool_name}")
