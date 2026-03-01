@@ -24,6 +24,7 @@ wheels/
 venv/
 ENV/
 env/
+.venv/
 
 # IDEs
 .vscode/
@@ -31,6 +32,10 @@ env/
 *.swp
 *.swo
 *~
+
+# Generated/vendor artifacts
+vscode-extension/node_modules/
+vscode-extension.zip
 
 # Data
 data/vector_store/
