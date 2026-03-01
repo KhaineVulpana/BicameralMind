@@ -1,4 +1,4 @@
-# Procedural Memory System - Implementation Complete ✅
+# Procedural Memory System - Implementation Complete 
 
 ## Overview
 
@@ -43,7 +43,7 @@ The **Procedural Memory System** for Bicameral Mind has been successfully implem
   - Multi-query fusion (rank-based and score-based)
   - Adaptive k selection
   - Type-based filtering
-  - Recent and controversial bullet detection (stubs)
+  - Recent and controversial bullet detection
 
 ### 2. Integration with Agents
 
@@ -66,19 +66,19 @@ The **Procedural Memory System** for Bicameral Mind has been successfully implem
 
 ## Key Design Principles Implemented
 
-### ✅ 1. **Bullet-Based Storage (NOT Summaries)**
+###  1. **Bullet-Based Storage (NOT Summaries)**
 - Each piece of knowledge is an atomic bullet
 - Never rewrite entire playbooks
 - Incremental addition and refinement
 
-### ✅ 2. **Three Separate Collections**
+###  2. **Three Separate Collections**
 ```
-procedural_left   → Left brain's knowledge
-procedural_right  → Right brain's knowledge
-procedural_shared → Consensus/promoted knowledge
+procedural_left   -> Left brain's knowledge
+procedural_right  -> Right brain's knowledge
+procedural_shared -> Consensus/promoted knowledge
 ```
 
-### ✅ 3. **Outcome-Based Learning (NOT Tick-Based)**
+###  3. **Outcome-Based Learning (NOT Tick-Based)**
 **CRITICAL:** Helpful/harmful counters are ONLY incremented by:
 - Tool success/failure
 - Test pass/fail
@@ -86,28 +86,28 @@ procedural_shared → Consensus/promoted knowledge
 - Validator results
 
 **NOT by:**
-- ❌ Consciousness ticks
-- ❌ Time spent
-- ❌ Iterations
+-  Consciousness ticks
+-  Time spent
+-  Iterations
 
-### ✅ 4. **Automatic Promotion to Shared**
+###  4. **Automatic Promotion to Shared**
 Bullets are promoted when:
 - Status = ACTIVE
 - helpful_count >= threshold (default: 3)
 - harmful_count = 0
 - Side = left or right (not already shared)
 
-### ✅ 5. **Quarantine → Active Lifecycle**
+###  5. **Quarantine -> Active Lifecycle**
 New bullets start QUARANTINED and become ACTIVE after validation:
 - helpful_count >= 2
 - harmful_count = 0
 
-### ✅ 6. **No Cross-Hemisphere Contamination**
+###  6. **No Cross-Hemisphere Contamination**
 - Each hemisphere maintains its own collection
 - Shared memory is the ONLY way knowledge crosses over
 - Prevents collapse into homogeneous thinking
 
-### ✅ 7. **Comprehensive Playbooks (Not Concise)**
+###  7. **Comprehensive Playbooks (Not Concise)**
 Following ACE principle: contexts should be **detailed playbooks**, not compressed summaries.
 - LLMs benefit from long, detailed contexts
 - They can distill relevance autonomously
@@ -117,23 +117,23 @@ Following ACE principle: contexts should be **detailed playbooks**, not compress
 
 ```
 core/memory/
-├── __init__.py                  # Exports: Bullet, ProceduralMemory, MemoryRetriever
-├── bullet.py                    # Bullet dataclass + enums
-├── procedural_store.py          # Low-level Chroma store (legacy compatible)
-├── procedural_memory.py         # High-level API wrapper
-└── retrieval.py                 # Advanced retrieval patterns
+ __init__.py                  # Exports: Bullet, ProceduralMemory, MemoryRetriever
+ bullet.py                    # Bullet dataclass + enums
+ procedural_store.py          # Low-level Chroma store (legacy compatible)
+ procedural_memory.py         # High-level API wrapper
+ retrieval.py                 # Advanced retrieval patterns
 
 core/left_brain/
-└── agent.py                     # ✅ Updated to use ProceduralMemory
+ agent.py                     #  Updated to use ProceduralMemory
 
 core/right_brain/
-└── agent.py                     # ✅ Updated to use ProceduralMemory
+ agent.py                     #  Updated to use ProceduralMemory
 
 core/
-└── bicameral_mind.py           # ✅ Updated to use ProceduralMemory
+ bicameral_mind.py           #  Updated to use ProceduralMemory
 
 examples/
-└── procedural_memory_example.py # Comprehensive usage examples
+ procedural_memory_example.py # Comprehensive usage examples
 ```
 
 ## Example Usage
@@ -240,19 +240,16 @@ procedural_memory:
 ## Next Steps (Phase 2)
 
 ### Remaining TODOs:
-1. **Deduplication Logic** - Identify and merge near-duplicate bullets
-2. **Pruning Logic** - Remove persistently low-quality bullets
-3. **Reflection Module** - Analyze execution traces to extract insights
-4. **Curator Logic** - Automated bullet generation from reflections
-5. **Tick Integration** - Connect consciousness ticks to reflection depth (NOT scoring)
-6. **MCP Integration** - Tool outcome signals feed learning
-7. **Episodic Trace Analytics** - Link bullets to execution traces
+1. **MCP Integration** - Tool outcome signals feed learning
+2. **Episodic Trace Analytics** - Link bullets to execution traces
+3. **Cross-hemisphere suggestions** - Optional teaching mode
+4. **Policy hardening** - Risk-tiered tool learning gates
 
 ### Critical Reminders:
-- ⚠️ **NEVER** increment helpful/harmful from ticks
-- ⚠️ **ONLY** from actual outcomes (tool results, tests, user feedback)
-- ⚠️ Ticks gate **reflection depth**, not learning signals
-- ⚠️ Keep procedural memory **separate** from factual RAG
+-  **NEVER** increment helpful/harmful from ticks
+-  **ONLY** from actual outcomes (tool results, tests, user feedback)
+-  Ticks gate **reflection depth**, not learning signals
+-  Keep procedural memory **separate** from factual RAG
 
 ## References
 
@@ -262,8 +259,8 @@ procedural_memory:
 
 ---
 
-**Status:** ✅ Phase 1 Complete - Procedural Memory Foundation Implemented
+**Status:**  Procedural Memory + Learning Maintenance Implemented
 
-**Date:** December 24, 2025
+**Date:** December 24-27, 2025
 
-**Next:** Reflection Module + Curator Logic (Phase 2)
+**Next:** MCP outcome wiring + episodic trace linkage

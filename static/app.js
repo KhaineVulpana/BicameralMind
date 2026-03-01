@@ -1,0 +1,1322 @@
+// WebSocket connection
+let ws = null;
+let isConnected = false;
+let toolCache = [];
+let chatSuggestions = [];
+let modelCache = [];
+let lastBackendMode = null;
+const chatMetrics = {
+    tokens: 0,
+    bullets: 0,
+    ticks: 0,
+    responseTime: 0
+};
+
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = value;
+    }
+}
+
+function estimateTokens(text) {
+    if (!text) return 0;
+    const trimmed = text.trim();
+    if (!trimmed) return 0;
+    return Math.max(1, Math.ceil(trimmed.length / 4));
+}
+
+function updateAnalytics() {
+    setText('analytics-tokens', `${chatMetrics.tokens}`);
+    setText('analytics-bullets', `${chatMetrics.bullets}`);
+    setText('analytics-ticks', `${chatMetrics.ticks}`);
+    setText('analytics-response-time', `${chatMetrics.responseTime}ms`);
+}
+
+function resetChatMetrics() {
+    chatMetrics.tokens = 0;
+    chatMetrics.bullets = 0;
+    chatMetrics.ticks = 0;
+    chatMetrics.responseTime = 0;
+    updateAnalytics();
+}
+
+function connectWebSocket() {
+    ws = new WebSocket('ws://localhost:8000/ws');
+
+    ws.onopen = () => {
+        isConnected = true;
+        updateStatus('CONNECTED');
+    };
+
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+    };
+
+    ws.onerror = () => {
+        updateStatus('ERROR');
+    };
+
+    ws.onclose = () => {
+        isConnected = false;
+        updateStatus('DISCONNECTED');
+        setTimeout(connectWebSocket, 3000);
+    };
+}
+
+function handleWebSocketMessage(data) {
+    if (data.type === 'status_update') {
+        const mode = data.mode ? data.mode.toUpperCase() : '-';
+        const tick = typeof data.tick_rate === 'number' ? data.tick_rate.toFixed(2) : '-';
+        document.getElementById('mode').textContent = `Mode: ${mode}`;
+        document.getElementById('tick').textContent = `Tick: ${tick}`;
+        const tickDetail = document.getElementById('tick-detail');
+        if (tickDetail) {
+            tickDetail.textContent = tick;
+        }
+        const tickCurrent = document.getElementById('tick-current');
+        if (tickCurrent) {
+            tickCurrent.textContent = tick;
+        }
+        const modeDetail = document.getElementById('mode-detail');
+        if (modeDetail) {
+            modeDetail.textContent = mode;
+        }
+    } else if (data.type === 'tool_execution') {
+        addToolLog(data);
+        scheduleToolStatsRefresh();
+    }
+}
+
+function updateStatus(status) {
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = `Status: ${status}`;
+    statusEl.style.color = status === 'CONNECTED' ? '#3fbac2' : status === 'ERROR' ? '#e06c75' : '#7f8b9b';
+}
+
+function setUiEnabled(enabled, reason = '') {
+    const sendBtn = document.getElementById('send-btn');
+    const input = document.getElementById('message-input');
+    const toolRunBtn = document.getElementById('tool-exec-run');
+
+    if (sendBtn) sendBtn.disabled = !enabled;
+    if (input) input.disabled = !enabled;
+    if (toolRunBtn) toolRunBtn.disabled = !enabled;
+
+    if (!enabled && reason) {
+        const messagesDiv = document.getElementById('chat-messages');
+        if (messagesDiv) {
+            const existing = messagesDiv.querySelector('.message.system[data-kind="backend-disabled"]');
+            if (!existing) {
+                const msg = document.createElement('div');
+                msg.className = 'message system';
+                msg.dataset.kind = 'backend-disabled';
+                msg.innerHTML = `
+                    <div class="message-meta">System</div>
+                    <div class="text">${escapeHtml(reason)}</div>
+                `;
+                messagesDiv.appendChild(msg);
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        }
+    }
+}
+
+async function fetchStatus() {
+    try {
+        const response = await fetch('/api/system/status');
+        const data = await response.json();
+
+        const memory = data.memory || { left: 0, right: 0, shared: 0, staging: 0 };
+        const mode = data.mode ? data.mode.toUpperCase() : '-';
+        const hemisphere = data.hemisphere ? data.hemisphere.toUpperCase() : '-';
+        const tickRate = typeof data.tick_rate === 'number' ? data.tick_rate.toFixed(2) : '-';
+
+        setText('mode', `Mode: ${mode}`);
+        setText('tick', `Tick: ${tickRate}`);
+
+        const memoryEl = document.getElementById('memory');
+        if (memoryEl) {
+            memoryEl.textContent = `L:${memory.left} R:${memory.right} S:${memory.shared}`;
+        }
+        const memoryLeft = document.getElementById('memory-left');
+        const memoryRight = document.getElementById('memory-right');
+        const memoryShared = document.getElementById('memory-shared');
+        if (memoryLeft) memoryLeft.textContent = memory.left ?? '-';
+        if (memoryRight) memoryRight.textContent = memory.right ?? '-';
+        if (memoryShared) memoryShared.textContent = memory.shared ?? '-';
+        const memoryStaging = document.getElementById('memory-staging');
+        if (memoryStaging) memoryStaging.textContent = memory.staging ?? '-';
+
+        const modeDetail = document.getElementById('mode-detail');
+        if (modeDetail) modeDetail.textContent = mode;
+        const hemisphereEl = document.getElementById('hemisphere');
+        if (hemisphereEl) hemisphereEl.textContent = hemisphere;
+        const tickDetail = document.getElementById('tick-detail');
+        if (tickDetail) tickDetail.textContent = tickRate;
+        const tickCurrent = document.getElementById('tick-current');
+        if (tickCurrent) tickCurrent.textContent = tickRate;
+        const modelName = document.getElementById('model-name');
+        if (modelName) modelName.textContent = data.model || '-';
+        const systemHealth = document.getElementById('system-health');
+        if (systemHealth) systemHealth.textContent = data.health || '-';
+
+        const backendMode = data.backend_mode || '';
+        const reason = data.reason || '';
+        const enabled = backendMode === 'ok';
+        if (backendMode && backendMode !== lastBackendMode) {
+            lastBackendMode = backendMode;
+            if (!enabled) {
+                setUiEnabled(false, reason || `Backend mode: ${backendMode}`);
+            } else {
+                setUiEnabled(true);
+            }
+        } else if (!enabled) {
+            setUiEnabled(false, reason || `Backend mode: ${backendMode || 'unknown'}`);
+        } else {
+            setUiEnabled(true);
+        }
+    } catch (error) {
+        console.error('Failed to fetch status:', error);
+        setUiEnabled(false, 'Unable to reach backend status endpoint.');
+    }
+}
+
+async function fetchMemoryStats() {
+    try {
+        const response = await fetch('/api/memory/stats');
+        const data = await response.json();
+        if (!data || data.enabled === false) {
+            setText('memory-active', '-');
+            setText('memory-quarantined', '-');
+            setText('memory-deprecated', '-');
+            return;
+        }
+        const status = data.status || {};
+        const total = status.total || {};
+        setText('memory-active', total.active ?? '-');
+        setText('memory-quarantined', total.quarantined ?? '-');
+        setText('memory-deprecated', total.deprecated ?? '-');
+        setText('memory-staged', total.staged ?? '-');
+    } catch (error) {
+        console.error('Failed to fetch memory stats:', error);
+    }
+}
+
+async function fetchProcedures() {
+    const list = document.getElementById('procedure-list');
+    if (!list) return;
+
+    try {
+        const response = await fetch('/api/procedures');
+        const data = await response.json();
+        const procedures = data.procedures || [];
+        if (!procedures.length) {
+            list.innerHTML = '<div class="loading">No procedures yet</div>';
+            return;
+        }
+        list.innerHTML = procedures.map((proc) => {
+            const tags = (proc.tags || []).slice(0, 3).join(', ');
+            return `
+                <div class="procedure-card">
+                    <div>
+                        <h3>${escapeHtml(proc.title || '')}</h3>
+                        <p>${escapeHtml(proc.description || '')}</p>
+                        <p>${tags ? `Tags: ${escapeHtml(tags)}` : 'No tags'} | Status: ${escapeHtml(proc.status || '')}</p>
+                    </div>
+                    <span class="pill">${escapeHtml(proc.side || 'shared')}</span>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Failed to fetch procedures:', error);
+        list.innerHTML = '<div class="loading">Failed to load procedures</div>';
+    }
+}
+
+async function fetchTools() {
+    const table = document.getElementById('tool-table');
+    if (!table) return;
+    table.innerHTML = `
+        <div class="tool-row header">
+            <span>Tool</span>
+            <span>Provider</span>
+            <span>Status</span>
+        </div>
+        <div class="tool-row"><span>Loading...</span><span></span><span></span></div>
+    `;
+    try {
+        const response = await fetch('/api/tools');
+        const data = await response.json();
+        const tools = data.tools || [];
+        toolCache = tools.slice();
+        populateToolRunner(tools);
+        if (!tools.length) {
+            table.innerHTML = `
+                <div class="tool-row header">
+                    <span>Tool</span><span>Provider</span><span>Status</span>
+                </div>
+                <div class="tool-row"><span>No tools registered</span><span></span><span></span></div>
+            `;
+            return;
+        }
+        table.innerHTML = `
+            <div class="tool-row header">
+                <span>Tool</span><span>Provider</span><span>Status</span>
+            </div>
+            ${tools.map((tool) => {
+                const statusClass = tool.enabled ? 'pill ok' : 'pill warn';
+                return `
+                    <div class="tool-row">
+                        <span>${escapeHtml(tool.name)}</span>
+                        <span>${escapeHtml(tool.provider)}</span>
+                        <span class="${statusClass}">${tool.enabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                `;
+            }).join('')}
+        `;
+    } catch (error) {
+        console.error('Failed to fetch tools:', error);
+        table.innerHTML = '<div class="tool-row"><span>Failed to load tools</span><span></span><span></span></div>';
+    }
+}
+
+async function fetchHighRiskChatSetting() {
+    const toggle = document.getElementById('toggle-high-risk-chat');
+    const status = document.getElementById('high-risk-status');
+    if (!toggle || !status) return;
+
+    try {
+        const response = await fetch('/api/tools/high_risk');
+        const data = await response.json();
+        const allow = !!data.allow_high_risk_chat;
+        toggle.checked = allow;
+        status.textContent = allow ? 'ENABLED' : 'DISABLED';
+    } catch (error) {
+        console.error('Failed to fetch high-risk chat tools status:', error);
+        status.textContent = 'ERROR';
+    }
+}
+
+async function setHighRiskChatSetting(allow) {
+    const toggle = document.getElementById('toggle-high-risk-chat');
+    if (!toggle) return;
+    toggle.disabled = true;
+    try {
+        const response = await fetch('/api/tools/high_risk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allow: !!allow })
+        });
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            throw new Error(data.message || `HTTP ${response.status}`);
+        }
+    } catch (error) {
+        alert(`Failed to update chat tool access: ${error.message || error}`);
+    } finally {
+        toggle.disabled = false;
+        fetchHighRiskChatSetting();
+    }
+}
+
+async function fetchRagStatus() {
+    const countEl = document.getElementById('rag-doc-count');
+    if (!countEl) return;
+    try {
+        const response = await fetch('/api/rag/status');
+        const data = await response.json();
+        if (!data.enabled) {
+            countEl.textContent = 'DISABLED';
+        } else {
+            countEl.textContent = `${data.documents || 0}`;
+        }
+    } catch (error) {
+        console.error('Failed to fetch RAG status:', error);
+        countEl.textContent = 'ERROR';
+    }
+}
+
+async function seedRag() {
+    const seedBtn = document.getElementById('rag-seed-btn');
+    if (seedBtn) seedBtn.disabled = true;
+    try {
+        const response = await fetch('/api/rag/seed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await response.json();
+        if (!response.ok || data.status === 'error') {
+            throw new Error(data.message || `HTTP ${response.status}`);
+        }
+        if (data.status === 'empty') {
+            alert('No seed docs found to ingest.');
+        } else {
+            alert(`Seeded RAG with ${data.documents_added || 0} docs.`);
+        }
+        fetchRagStatus();
+    } catch (error) {
+        alert(`Failed to seed RAG: ${error.message || error}`);
+    } finally {
+        if (seedBtn) seedBtn.disabled = false;
+    }
+}
+
+let toolStatsRefreshTimer = null;
+function scheduleToolStatsRefresh() {
+    if (toolStatsRefreshTimer) return;
+    toolStatsRefreshTimer = setTimeout(async () => {
+        toolStatsRefreshTimer = null;
+        await fetchToolStats();
+    }, 600);
+}
+
+function renderToolTimeline(timeline) {
+    const chart = document.getElementById('tools-success-timeline');
+    if (!chart) return;
+
+    const buckets = Array.isArray(timeline) ? timeline : [];
+    if (!buckets.length) {
+        chart.innerHTML = '<span style="height: 0%"></span>'.repeat(6);
+        return;
+    }
+
+    chart.innerHTML = buckets.map((b) => {
+        const rate = Math.max(0, Math.min(1, Number(b.success_rate) || 0));
+        const height = Math.round(rate * 100);
+        const total = Number(b.total) || 0;
+        const success = Number(b.success) || 0;
+        const title = `${Math.round(rate * 100)}% (${success}/${total})`;
+        return `<span style="height: ${height}%" title="${escapeHtml(title)}"></span>`;
+    }).join('');
+}
+
+function renderToolFlow(recent) {
+    const flow = document.getElementById('tools-flow');
+    if (!flow) return;
+
+    const items = Array.isArray(recent) ? recent : [];
+    if (!items.length) {
+        flow.innerHTML = '<div class="flow-node">No executions yet</div>';
+        return;
+    }
+
+    const nodes = ['User'];
+    for (const item of items.slice(0, 6).reverse()) {
+        const hemi = item.hemisphere ? String(item.hemisphere).toUpperCase() : 'SYS';
+        const tool = item.tool ? String(item.tool) : '';
+        const ok = item.success ? 'OK' : 'FAIL';
+        nodes.push(`${hemi}: ${tool} (${ok})`);
+    }
+    nodes.push('Result');
+
+    flow.innerHTML = nodes.map((n) => `<div class="flow-node">${escapeHtml(n)}</div>`).join('');
+}
+
+async function fetchToolStats() {
+    try {
+        const resp = await fetch('/api/tools/stats?window_minutes=60&buckets=12&recent=12');
+        const data = await resp.json();
+
+        const perTool = Array.isArray(data.per_tool) ? data.per_tool : [];
+        const mostUsed = perTool[0] || null;
+
+        if (mostUsed) {
+            setText('tools-most-used', mostUsed.name || '-');
+            setText('tools-most-used-meta', `${mostUsed.total || 0} calls`);
+        } else {
+            setText('tools-most-used', '-');
+            setText('tools-most-used-meta', '-');
+        }
+
+        const eligibleForRate = perTool.filter((r) => (r.total || 0) > 0);
+        let best = null;
+        for (const row of eligibleForRate) {
+            if (!best) best = row;
+            const bestRate = Number(best.success_rate) || 0;
+            const rowRate = Number(row.success_rate) || 0;
+            if (rowRate > bestRate) best = row;
+        }
+
+        if (best) {
+            setText('tools-highest-success', `${Math.round((Number(best.success_rate) || 0) * 100)}%`);
+            setText('tools-highest-success-meta', best.name || '-');
+        } else {
+            setText('tools-highest-success', '-');
+            setText('tools-highest-success-meta', '-');
+        }
+
+        let mostLearning = null;
+        for (const row of eligibleForRate) {
+            if (!mostLearning) mostLearning = row;
+            const bestFails = Number(mostLearning.failed) || 0;
+            const rowFails = Number(row.failed) || 0;
+            if (rowFails > bestFails) mostLearning = row;
+        }
+
+        if (mostLearning) {
+            setText('tools-most-learning', `${mostLearning.failed || 0}`);
+            setText('tools-most-learning-meta', mostLearning.name || '-');
+        } else {
+            setText('tools-most-learning', '-');
+            setText('tools-most-learning-meta', '-');
+        }
+
+        renderToolTimeline(data.timeline);
+        renderToolFlow(data.recent);
+    } catch (error) {
+        console.error('Failed to fetch tool stats:', error);
+    }
+}
+
+function populateToolRunner(tools) {
+    const select = document.getElementById('tool-exec-name');
+    if (!select) return;
+
+    const current = select.value;
+    const sorted = (tools || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    select.innerHTML = sorted
+        .map((tool) => {
+            const label = `${tool.name} (${tool.provider})`;
+            return `<option value="${escapeHtml(tool.name)}">${escapeHtml(label)}</option>`;
+        })
+        .join('');
+
+    if (current && (tools || []).some((t) => t.name === current)) {
+        select.value = current;
+    } else if (!select.value && sorted.length) {
+        select.value = sorted[0].name;
+    }
+}
+
+function populateModelSelect(select, models, { allowEmpty = false, emptyLabel = '' } = {}) {
+    if (!select) return;
+    const current = select.value;
+    const options = [];
+
+    if (allowEmpty) {
+        options.push(`<option value="">${escapeHtml(emptyLabel || '(default)')}</option>`);
+    }
+
+    for (const model of models || []) {
+        const name = model && model.name ? String(model.name) : '';
+        if (!name) continue;
+        const metaBits = [];
+        if (model.size) metaBits.push(model.size);
+        if (model.modified) metaBits.push(model.modified);
+        const label = metaBits.length ? `${name} — ${metaBits.join(' • ')}` : name;
+        options.push(`<option value="${escapeHtml(name)}">${escapeHtml(label)}</option>`);
+    }
+
+    select.innerHTML = options.join('') || '<option value="">(no models found)</option>';
+
+    if (current && Array.from(select.options).some((o) => o.value === current)) {
+        select.value = current;
+    }
+}
+
+async function initModelPickers() {
+    const slowSelect = document.getElementById('model-slow');
+    const fastSelect = document.getElementById('model-fast');
+    if (!slowSelect || !fastSelect) return;
+
+    slowSelect.disabled = true;
+    fastSelect.disabled = true;
+    slowSelect.innerHTML = '<option value="">Loading models...</option>';
+    fastSelect.innerHTML = '<option value="">Loading models...</option>';
+
+    try {
+        const [modelsResp, activeResp] = await Promise.all([
+            fetch('/api/models/ollama'),
+            fetch('/api/models/active'),
+        ]);
+        const modelsData = await modelsResp.json();
+        const activeData = await activeResp.json();
+
+        const models = Array.isArray(modelsData.models) ? modelsData.models : [];
+        const errorItem = models.find((m) => m && m.error);
+        if (errorItem && errorItem.error) {
+            slowSelect.innerHTML = `<option value="">${escapeHtml(String(errorItem.error))}</option>`;
+            fastSelect.innerHTML = `<option value="">${escapeHtml(String(errorItem.error))}</option>`;
+            return;
+        }
+
+        modelCache = models.slice();
+        populateModelSelect(slowSelect, modelCache, { allowEmpty: false });
+        populateModelSelect(fastSelect, modelCache, { allowEmpty: true, emptyLabel: '(same as slow)' });
+
+        const activeSlow = activeData && typeof activeData.slow === 'string' ? activeData.slow : '';
+        const activeFast = activeData && typeof activeData.fast === 'string' ? activeData.fast : '';
+
+        if (activeSlow && Array.from(slowSelect.options).some((o) => o.value === activeSlow)) {
+            slowSelect.value = activeSlow;
+        } else if (!slowSelect.value) {
+            const firstReal = Array.from(slowSelect.options).find((o) => o.value);
+            if (firstReal) slowSelect.value = firstReal.value;
+        }
+
+        if (activeFast && Array.from(fastSelect.options).some((o) => o.value === activeFast)) {
+            fastSelect.value = activeFast;
+        } else {
+            fastSelect.value = '';
+        }
+
+        slowSelect.disabled = false;
+        fastSelect.disabled = false;
+
+        const persist = async () => {
+            const slow = slowSelect.value;
+            const fast = fastSelect.value || '';
+            if (!slow) return;
+            const resp = await fetch('/api/models/active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slow, fast }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                throw new Error(data.error || `HTTP ${resp.status}`);
+            }
+            await fetchStatus();
+        };
+
+        slowSelect.addEventListener('change', async () => {
+            slowSelect.disabled = true;
+            fastSelect.disabled = true;
+            try {
+                await persist();
+            } catch (error) {
+                alert(`Failed to set model: ${error.message || error}`);
+            } finally {
+                slowSelect.disabled = false;
+                fastSelect.disabled = false;
+            }
+        });
+
+        fastSelect.addEventListener('change', async () => {
+            slowSelect.disabled = true;
+            fastSelect.disabled = true;
+            try {
+                await persist();
+            } catch (error) {
+                alert(`Failed to set model: ${error.message || error}`);
+            } finally {
+                slowSelect.disabled = false;
+                fastSelect.disabled = false;
+            }
+        });
+    } catch (error) {
+        console.error('Failed to init model pickers:', error);
+        slowSelect.innerHTML = '<option value="">Failed to load models</option>';
+        fastSelect.innerHTML = '<option value="">Failed to load models</option>';
+    }
+}
+
+async function runSelectedTool() {
+    const nameEl = document.getElementById('tool-exec-name');
+    const paramsEl = document.getElementById('tool-exec-params');
+    const hemiEl = document.getElementById('tool-exec-hemisphere');
+    const confEl = document.getElementById('tool-exec-confidence');
+    const outEl = document.getElementById('tool-exec-output');
+    if (!nameEl || !paramsEl || !hemiEl || !confEl || !outEl) return;
+
+    const toolName = nameEl.value;
+    let parameters = {};
+    try {
+        parameters = JSON.parse(paramsEl.value || '{}');
+    } catch (err) {
+        outEl.value = `Invalid JSON: ${err}`;
+        return;
+    }
+
+    const confidence = Number(confEl.value);
+    const hemisphere = (hemiEl.value || 'left').toLowerCase();
+
+    outEl.value = 'Running...';
+
+    try {
+        const resp = await fetch('/api/tools/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                tool_name: toolName,
+                parameters,
+                hemisphere,
+                confidence: Number.isFinite(confidence) ? confidence : 0.5
+            })
+        });
+        const data = await resp.json();
+        outEl.value = JSON.stringify(data, null, 2);
+    } catch (error) {
+        outEl.value = `Request failed: ${error}`;
+    }
+}
+
+async function fetchStaged() {
+    const table = document.getElementById('staged-table');
+    if (!table) return;
+    table.innerHTML = `
+        <div class="tool-row header">
+            <span>Text</span><span>Confidence</span><span>Source</span><span>Actions</span>
+        </div>
+        <div class="tool-row"><span>Loading...</span><span></span><span></span><span></span></div>
+    `;
+    try {
+        const response = await fetch('/api/memory/staged');
+        const data = await response.json();
+        const bullets = data.bullets || [];
+        if (!bullets.length) {
+            table.innerHTML = `
+                <div class="tool-row header">
+                    <span>Text</span><span>Confidence</span><span>Source</span><span>Actions</span>
+                </div>
+                <div class="tool-row"><span>No staged bullets</span><span></span><span></span><span></span></div>
+            `;
+            return;
+        }
+        table.innerHTML = `
+            <div class="tool-row header">
+                <span>Text</span><span>Confidence</span><span>Source</span><span>Actions</span>
+            </div>
+            ${bullets.map((b) => {
+                const conf = (b.confidence ?? 0).toFixed ? b.confidence.toFixed(2) : b.confidence || '-';
+                const src = (b.metadata && b.metadata.source_hemisphere) ? b.metadata.source_hemisphere : '-';
+                return `
+                    <div class="tool-row">
+                        <span title="${escapeHtml(b.id)}">${escapeHtml(b.text || '')}</span>
+                        <span>${conf}</span>
+                        <span>${escapeHtml(src)}</span>
+                        <span class="actions">
+                            <button class="ghost-btn" data-action="assign-left" data-id="${b.id}">Assign Left</button>
+                            <button class="ghost-btn" data-action="assign-right" data-id="${b.id}">Assign Right</button>
+                            <button class="ghost-btn warn" data-action="reject" data-id="${b.id}">Reject</button>
+                        </span>
+                    </div>
+                `;
+            }).join('')}
+        `;
+        table.querySelectorAll('button').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const id = btn.dataset.id;
+                if (!id) return;
+                if (btn.dataset.action === 'assign-left') {
+                    await assignStaged(id, 'left');
+                } else if (btn.dataset.action === 'assign-right') {
+                    await assignStaged(id, 'right');
+                } else if (btn.dataset.action === 'reject') {
+                    await rejectStaged(id);
+                }
+                fetchStaged();
+                fetchMemoryStats();
+            });
+        });
+    } catch (error) {
+        console.error('Failed to fetch staged bullets:', error);
+        table.innerHTML = '<div class="tool-row"><span>Failed to load staged bullets</span><span></span><span></span><span></span></div>';
+    }
+}
+
+async function assignStaged(id, target) {
+    await fetch(`/api/memory/staged/${encodeURIComponent(id)}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target })
+    });
+}
+
+async function rejectStaged(id) {
+    await fetch(`/api/memory/staged/${encodeURIComponent(id)}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+}
+
+async function fetchMCPServers() {
+    try {
+        const response = await fetch('/api/mcp/servers');
+        const data = await response.json();
+        const serversDiv = document.getElementById('mcp-servers');
+        if (!serversDiv) return;
+
+        if (data.servers && data.servers.length > 0) {
+            serversDiv.innerHTML = data.servers.map((server) => {
+                const statusClass = server.status === 'connected' ? 'pill ok' : server.status === 'disabled' ? 'pill' : 'pill warn';
+                const toggleLabel = server.enabled ? 'Disable' : 'Enable';
+                return `
+                    <div class="server-item" data-name="${escapeHtml(server.name)}">
+                        <div class="server-head">
+                            <div class="server-name">${escapeHtml(server.name)}</div>
+                            <div class="server-actions">
+                                <button class="ghost-btn" data-action="toggle">${toggleLabel}</button>
+                                <button class="ghost-btn" data-action="remove">Remove</button>
+                            </div>
+                        </div>
+                        <div class="server-meta">
+                            <span class="${statusClass}">${escapeHtml(server.status || 'unknown')}</span>
+                            <span>Tools: ${server.tools ?? 0}</span>
+                            <span>Category: ${escapeHtml(server.category || 'other')}</span>
+                        </div>
+                        <div class="server-meta">${escapeHtml(server.description || '')}</div>
+                    </div>
+                `;
+            }).join('');
+
+            serversDiv.querySelectorAll('.server-item').forEach((item) => {
+                const name = item.dataset.name;
+                item.querySelectorAll('button').forEach((btn) => {
+                    btn.addEventListener('click', () => handleServerAction(name, btn.dataset.action));
+                });
+            });
+        } else {
+            serversDiv.innerHTML = '<div class="loading">No servers configured</div>';
+        }
+    } catch (error) {
+        console.error('Failed to fetch MCP servers:', error);
+    }
+}
+
+async function handleServerAction(name, action) {
+    if (!name) return;
+    if (action === 'remove') {
+        await deleteMCPServer(name);
+    } else if (action === 'toggle') {
+        await toggleMCPServer(name);
+    }
+}
+
+async function toggleMCPServer(name) {
+    try {
+        const response = await fetch(`/api/mcp/servers/${encodeURIComponent(name)}`);
+        const server = await response.json();
+        const nextEnabled = !server.enabled;
+        await fetch(`/api/mcp/servers/${encodeURIComponent(name)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: nextEnabled })
+        });
+        fetchMCPServers();
+    } catch (error) {
+        console.error('Failed to toggle server:', error);
+    }
+}
+
+async function deleteMCPServer(name) {
+    try {
+        await fetch(`/api/mcp/servers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        fetchMCPServers();
+    } catch (error) {
+        console.error('Failed to delete server:', error);
+    }
+}
+
+async function addMCPServer(event) {
+    event.preventDefault();
+    const payload = {
+        name: document.getElementById('mcp-name').value.trim(),
+        type: document.getElementById('mcp-type').value,
+        command: document.getElementById('mcp-command').value.trim(),
+        args: document.getElementById('mcp-args').value.split(',').map((s) => s.trim()).filter(Boolean),
+        description: document.getElementById('mcp-description').value.trim(),
+        category: document.getElementById('mcp-category').value.trim(),
+        enabled: document.getElementById('mcp-enabled').checked
+    };
+
+    try {
+        await fetch('/api/mcp/servers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        event.target.reset();
+        fetchMCPServers();
+    } catch (error) {
+        console.error('Failed to add server:', error);
+    }
+}
+
+async function sendMessage() {
+    const input = document.getElementById('message-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage('user', text);
+    input.value = '';
+
+    input.disabled = true;
+    document.getElementById('send-btn').disabled = true;
+    const startTime = performance.now();
+
+    try {
+        const modeSelect = document.getElementById('chat-mode');
+        const tempInput = document.getElementById('chat-temp');
+        const tokenInput = document.getElementById('chat-tokens');
+        const payload = {
+            text,
+            mode: modeSelect ? modeSelect.value : 'auto'
+        };
+        const tempValue = tempInput ? parseFloat(tempInput.value) : NaN;
+        const tokenValue = tokenInput ? parseInt(tokenInput.value, 10) : NaN;
+        if (Number.isFinite(tempValue)) {
+            payload.temperature = tempValue;
+        }
+        if (Number.isFinite(tokenValue)) {
+            payload.max_tokens = tokenValue;
+        }
+
+        const response = await fetch('/api/chat/message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        const responseText = data.response || data.output || '';
+        addMessage('assistant', responseText, {
+            mode: data.mode,
+            tick: data.tick_rate,
+            hemisphere: data.hemisphere,
+            bullets: data.bullets_used
+        }, data.details);
+        renderChatTrace(data.details);
+        renderChatContext(data.details);
+        pushSuggestionsFromDetails(data.details);
+
+        chatMetrics.tokens += estimateTokens(text) + estimateTokens(responseText);
+        if (Number.isFinite(data.bullets_used)) {
+            chatMetrics.bullets += data.bullets_used;
+        }
+        chatMetrics.ticks += 1;
+        chatMetrics.responseTime = Math.round(performance.now() - startTime);
+        updateAnalytics();
+
+        fetchStatus();
+    } catch (error) {
+        console.error('Failed to send message:', error);
+        addMessage('system', `Error: ${error.message}`);
+    } finally {
+        input.disabled = false;
+        document.getElementById('send-btn').disabled = false;
+        input.focus();
+    }
+}
+
+function addMessage(type, text, meta = null, details = null) {
+    const messagesDiv = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    const normalized = (type || '').toLowerCase();
+    const roleMap = {
+        user: 'user',
+        left: 'left',
+        right: 'right',
+        both: 'integrated',
+        integrated: 'integrated',
+        assistant: 'integrated',
+        meta: 'integrated',
+        system: 'system'
+    };
+    const labelMap = {
+        user: 'User',
+        left: 'Left Brain',
+        right: 'Right Brain',
+        both: 'Integrated',
+        integrated: 'Integrated',
+        assistant: 'Assistant',
+        meta: 'Meta Controller',
+        system: 'System'
+    };
+    const role = roleMap[normalized] || 'system';
+    const label = labelMap[normalized] || 'System';
+    messageDiv.className = `message ${role}`;
+
+    let metaHtml = '';
+    if (meta) {
+        const mode = meta.mode ? meta.mode.toUpperCase() : '-';
+        const tick = typeof meta.tick === 'number' ? meta.tick.toFixed(2) : '-';
+        const hemisphere = meta.hemisphere ? meta.hemisphere.toUpperCase() : '-';
+        metaHtml = `<div class="meta">Mode: ${mode} | Tick: ${tick} | Hemisphere: ${hemisphere} | Bullets: ${meta.bullets || 0}</div>`;
+    }
+
+    let detailHtml = '';
+    if (details && (details.left || details.right)) {
+        const blocks = [];
+        if (details.left) {
+            blocks.push(`
+                <div class="detail-block">
+                    <div class="detail-title">Left Brain</div>
+                    <pre>${escapeHtml(String(details.left))}</pre>
+                </div>
+            `);
+        }
+        if (details.right) {
+            blocks.push(`
+                <div class="detail-block">
+                    <div class="detail-title">Right Brain</div>
+                    <pre>${escapeHtml(String(details.right))}</pre>
+                </div>
+            `);
+        }
+        detailHtml = `
+            <details class="message-details">
+                <summary>View agent responses</summary>
+                ${blocks.join('')}
+            </details>
+        `;
+    }
+
+    messageDiv.innerHTML = `
+        <div class="message-meta">${label}</div>
+        <div class="text">${escapeHtml(text)}</div>
+        ${metaHtml}
+        ${detailHtml}
+    `;
+
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function clearChat() {
+    const messagesDiv = document.getElementById('chat-messages');
+    if (!messagesDiv) return;
+    messagesDiv.innerHTML = `
+        <div class="message system">
+            <div class="message-meta">System</div>
+            <div class="text">BicameralMind ready. Ask a question to begin.</div>
+        </div>
+    `;
+    const traceDiv = document.getElementById('chat-trace');
+    if (traceDiv) {
+        traceDiv.innerHTML = '<div class="context-item">No trace yet.</div>';
+    }
+    const contextDiv = document.getElementById('chat-context');
+    if (contextDiv) {
+        contextDiv.innerHTML = '<div class="context-item">No bullets yet.</div>';
+    }
+    chatSuggestions = [];
+    renderSuggestions();
+    resetChatMetrics();
+}
+
+function renderChatTrace(details) {
+    const traceDiv = document.getElementById('chat-trace');
+    if (!traceDiv) return;
+
+    if (!details || typeof details !== 'object') {
+        traceDiv.innerHTML = '<div class="context-item">No trace available.</div>';
+        return;
+    }
+
+    const left = details.left ? String(details.left) : '';
+    const right = details.right ? String(details.right) : '';
+    const rag = details.rag_context && typeof details.rag_context === 'object' ? details.rag_context : null;
+
+    const blocks = [];
+
+    if (rag) {
+        const sources = Array.isArray(rag.sources) ? rag.sources.slice(0, 3).join('\n') : '';
+        const ragText = [
+            rag.answer ? `Answer:\n${rag.answer}` : '',
+            sources ? `Sources:\n${sources}` : '',
+            typeof rag.iterations === 'number' ? `Iterations: ${rag.iterations}` : ''
+        ].filter(Boolean).join('\n\n');
+        blocks.push(
+            `<details class="trace-block" open><summary>RAG Context</summary><pre>${escapeHtml(ragText || '—')}</pre></details>`
+        );
+    }
+
+    if (left) {
+        blocks.push(
+            `<details class="trace-block"><summary>Left Brain</summary><pre>${escapeHtml(left)}</pre></details>`
+        );
+    }
+
+    if (right) {
+        blocks.push(
+            `<details class="trace-block"><summary>Right Brain</summary><pre>${escapeHtml(right)}</pre></details>`
+        );
+    }
+
+    traceDiv.innerHTML = blocks.length ? blocks.join('') : '<div class="context-item">No trace yet.</div>';
+}
+
+function renderChatContext(details) {
+    const root = document.getElementById('chat-context');
+    if (!root) return;
+
+    const bullets = details && Array.isArray(details.retrieved_bullets) ? details.retrieved_bullets : [];
+    if (!bullets.length) {
+        root.innerHTML = '<div class="context-item">No bullets yet.</div>';
+        return;
+    }
+
+    root.innerHTML = bullets.slice(0, 10).map((b) => {
+        const id = b && b.id ? String(b.id) : '';
+        const side = b && b.side ? String(b.side).toUpperCase() : '-';
+        const score = b && b.score !== undefined ? Number(b.score) : NaN;
+        const scoreText = Number.isFinite(score) ? score.toFixed(2) : '-';
+        const text = b && b.text ? String(b.text) : '';
+        return `
+            <div class="context-item">
+                <strong>[${escapeHtml(id.slice(0, 12))}] (${escapeHtml(side)}) score=${escapeHtml(scoreText)}</strong>
+                <div class="context-meta">${escapeHtml(text)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function extractCandidateBullets(text) {
+    if (!text) return [];
+    const lines = String(text).split('\n').map((l) => l.trim()).filter(Boolean);
+    const candidates = [];
+
+    for (const line of lines) {
+        if (candidates.length >= 6) break;
+        const looksLikeBullet = /^([-*]\s+|\d+\.\s+|\d+\)\s+)/.test(line);
+        if (!looksLikeBullet) continue;
+        const cleaned = line.replace(/^([-*]\s+|\d+\.\s+|\d+\)\s+)/, '').trim();
+        if (cleaned.length >= 12 && cleaned.length <= 220) {
+            candidates.push(cleaned);
+        }
+    }
+
+    if (candidates.length) return candidates;
+
+    const raw = String(text).replace(/\s+/g, ' ').trim();
+    if (!raw) return [];
+    const parts = raw.split(/(?<=[.!?])\\s+/).slice(0, 2);
+    const fallback = parts.join(' ').trim();
+    if (fallback.length >= 12) return [fallback.slice(0, 220)];
+    return [];
+}
+
+function pushSuggestionsFromDetails(details) {
+    if (!details || typeof details !== 'object') return;
+    const left = details.left ? String(details.left) : '';
+    const right = details.right ? String(details.right) : '';
+
+    const newItems = [];
+    for (const candidate of [...extractCandidateBullets(left), ...extractCandidateBullets(right)]) {
+        if (!candidate) continue;
+        newItems.push({
+            id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+            text: candidate,
+            confidence: 0.5,
+            tags: []
+        });
+    }
+
+    const seen = new Set(chatSuggestions.map((s) => s.text.toLowerCase().trim()));
+    for (const item of newItems) {
+        const key = item.text.toLowerCase().trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        chatSuggestions.unshift(item);
+    }
+
+    chatSuggestions = chatSuggestions.slice(0, 6);
+    renderSuggestions();
+}
+
+function renderSuggestions() {
+    const root = document.getElementById('chat-suggestions');
+    if (!root) return;
+
+    if (!chatSuggestions.length) {
+        root.innerHTML = '<div class="context-item">No suggestions yet.</div>';
+        return;
+    }
+
+    root.innerHTML = chatSuggestions.map((s) => {
+        return `
+            <div class="context-item" data-suggestion-id="${escapeHtml(s.id)}">
+                <strong>${escapeHtml(s.text)}</strong>
+                <div class="context-actions">
+                    <button class="ghost-btn" data-action="approve">Send to Staging</button>
+                    <button class="ghost-btn" data-action="edit">Edit</button>
+                    <button class="ghost-btn" data-action="reject">Dismiss</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    root.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const container = btn.closest('[data-suggestion-id]');
+            const id = container ? container.dataset.suggestionId : null;
+            if (!id) return;
+            const idx = chatSuggestions.findIndex((s) => s.id === id);
+            if (idx < 0) return;
+            const item = chatSuggestions[idx];
+
+            if (btn.dataset.action === 'reject') {
+                chatSuggestions.splice(idx, 1);
+                renderSuggestions();
+                return;
+            }
+
+            if (btn.dataset.action === 'edit') {
+                const updated = prompt('Edit bullet text', item.text);
+                if (updated && updated.trim()) {
+                    item.text = updated.trim();
+                    renderSuggestions();
+                }
+                return;
+            }
+
+            if (btn.dataset.action === 'approve') {
+                btn.disabled = true;
+                try {
+                    const resp = await fetch('/api/memory/staged', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: item.text, confidence: item.confidence, tags: item.tags })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || data.error) {
+                        alert(`Failed to stage bullet: ${data.error || resp.status}`);
+                        btn.disabled = false;
+                        return;
+                    }
+                    chatSuggestions.splice(idx, 1);
+                    renderSuggestions();
+                    fetchStaged();
+                } catch (error) {
+                    alert(`Failed to stage bullet: ${error}`);
+                    btn.disabled = false;
+                }
+            }
+        });
+    });
+}
+
+function addToolLog(data) {
+    const logDiv = document.getElementById('mcp-log');
+    if (!logDiv) return;
+
+    if (logDiv.querySelector('.log-entry')?.textContent === 'No executions yet') {
+        logDiv.innerHTML = '';
+    }
+
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${data.success ? 'success' : 'error'}`;
+    const timestamp = new Date().toLocaleTimeString();
+    entry.textContent = `${timestamp}  ${data.tool}()  ${data.success ? 'SUCCESS' : 'FAILED'}  ${data.duration_ms}ms`;
+    logDiv.insertBefore(entry, logDiv.firstChild);
+
+    while (logDiv.children.length > 12) {
+        logDiv.removeChild(logDiv.lastChild);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function initTabs() {
+    document.querySelectorAll('.tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+            tab.classList.add('active');
+            const target = tab.dataset.tab;
+            document.querySelectorAll('.tab-panel').forEach((panel) => {
+                panel.classList.toggle('active', panel.id === `tab-${target}`);
+            });
+        });
+    });
+}
+
+function openMCPConfig() {
+    window.open('/static/mcp-config.html', '_blank', 'noopener,noreferrer');
+}
+
+function bootUi() {
+    initTabs();
+    initModelPickers();
+    connectWebSocket();
+    fetchStatus();
+    fetchMemoryStats();
+    fetchMCPServers();
+    fetchProcedures();
+    fetchTools();
+    fetchToolStats();
+    fetchStaged();
+    fetchHighRiskChatSetting();
+    fetchRagStatus();
+    updateAnalytics();
+
+    setInterval(fetchStatus, 5000);
+    setInterval(fetchMemoryStats, 10000);
+    setInterval(fetchMCPServers, 10000);
+    setInterval(fetchToolStats, 15000);
+
+    const refreshBtn = document.getElementById('refresh-procedures');
+    if (refreshBtn) refreshBtn.addEventListener('click', fetchProcedures);
+    const refreshToolsBtn = document.getElementById('refresh-tools');
+    if (refreshToolsBtn) refreshToolsBtn.addEventListener('click', fetchTools);
+    const refreshStagedBtn = document.getElementById('refresh-staged');
+    if (refreshStagedBtn) refreshStagedBtn.addEventListener('click', fetchStaged);
+
+    const searchInput = document.getElementById('procedure-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase().trim();
+            document.querySelectorAll('.procedure-card').forEach((card) => {
+                const text = card.textContent.toLowerCase();
+                card.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+
+    const toolSearch = document.getElementById('tool-search');
+    if (toolSearch) {
+        toolSearch.addEventListener('input', () => {
+            const query = toolSearch.value.toLowerCase().trim();
+            document.querySelectorAll('#tool-table .tool-row').forEach((row) => {
+                if (row.classList.contains('header')) return;
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+
+    const addForm = document.getElementById('mcp-add-form');
+    if (addForm) addForm.addEventListener('submit', addMCPServer);
+
+    const highRiskToggle = document.getElementById('toggle-high-risk-chat');
+    if (highRiskToggle) {
+        highRiskToggle.addEventListener('change', () => setHighRiskChatSetting(highRiskToggle.checked));
+    }
+    const refreshHighRiskBtn = document.getElementById('refresh-high-risk-chat');
+    if (refreshHighRiskBtn) refreshHighRiskBtn.addEventListener('click', fetchHighRiskChatSetting);
+
+    const ragSeedBtn = document.getElementById('rag-seed-btn');
+    if (ragSeedBtn) ragSeedBtn.addEventListener('click', seedRag);
+    const ragStatusBtn = document.getElementById('rag-status-btn');
+    if (ragStatusBtn) ragStatusBtn.addEventListener('click', fetchRagStatus);
+
+    document.getElementById('send-btn').addEventListener('click', sendMessage);
+    const clearBtn = document.getElementById('chat-clear');
+    if (clearBtn) clearBtn.addEventListener('click', clearChat);
+
+    const toolRunBtn = document.getElementById('tool-exec-run');
+    if (toolRunBtn) toolRunBtn.addEventListener('click', runSelectedTool);
+
+    const input = document.getElementById('message-input');
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+}
+
+// Initialize
+if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', bootUi);
+} else {
+    bootUi();
+}

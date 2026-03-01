@@ -2,7 +2,7 @@
 """Learning Pipeline Example - Phase 2 Features.
 
 This demonstrates the complete learning cycle:
-1. Execute task → Generate trace
+1. Execute task -> Generate trace
 2. Reflect on trace (depth based on tick rate)
 3. Extract insights
 4. Curate into bullets
@@ -45,7 +45,7 @@ async def example_basic_learning_cycle():
     memory = ProceduralMemory(config)
     pipeline = LearningPipeline(memory)
 
-    console.print("[green]✓[/green] Initialized learning pipeline")
+    console.print("[green]OK[/green] Initialized learning pipeline")
 
     # Simulate a successful task execution
     console.print("\n[bold]Scenario: Successful API call[/bold]")
@@ -76,7 +76,7 @@ async def example_basic_learning_cycle():
     console.print(f"  Bullets created: {result.bullets_created}")
     console.print(f"  Bullets marked helpful: {result.bullets_marked_helpful}")
 
-    console.print("[green]✓ Basic learning cycle complete![/green]\n")
+    console.print("[green]OK Basic learning cycle complete![/green]\n")
 
 
 async def example_failure_learning():
@@ -120,7 +120,7 @@ async def example_failure_learning():
     console.print(f"  Bullets created: {result.bullets_created}")
     console.print(f"  Bullets marked harmful: {result.bullets_marked_harmful}")
 
-    console.print("[green]✓ Failure learning complete![/green]\n")
+    console.print("[green]OK Failure learning complete![/green]\n")
 
 
 async def example_tick_gated_reflection():
@@ -144,7 +144,7 @@ async def example_tick_gated_reflection():
         ("Failure", 0.95, "deep"),
     ]
 
-    table = Table(title="Tick Rate → Reflection Depth")
+    table = Table(title="Tick Rate -> Reflection Depth")
     table.add_column("Scenario", style="cyan")
     table.add_column("Tick Rate", style="magenta")
     table.add_column("Expected Depth", style="yellow")
@@ -172,7 +172,7 @@ async def example_tick_gated_reflection():
 
     console.print(table)
     console.print("\n[dim]Note: Ticks gate reflection DEPTH, not outcome scoring![/dim]")
-    console.print("[green]✓ Tick-gated reflection demonstration complete![/green]\n")
+    console.print("[green]OK Tick-gated reflection demonstration complete![/green]\n")
 
 
 async def example_learning_stats():
@@ -210,7 +210,7 @@ async def example_learning_stats():
     for key, value in stats.items():
         console.print(f"  {key}: {value}")
 
-    console.print("[green]✓ Learning statistics complete![/green]\n")
+    console.print("[green]OK Learning statistics complete![/green]\n")
 
 
 async def example_maintenance():
@@ -241,14 +241,14 @@ async def example_maintenance():
         console.print(f"  {key}: {value}")
 
     console.print("\n[dim]Note: Pruning and deduplication are stubs in current implementation[/dim]")
-    console.print("[green]✓ Maintenance demonstration complete![/green]\n")
+    console.print("[green]OK Maintenance demonstration complete![/green]\n")
 
 
 async def main():
     """Run all examples."""
     console.print(Panel.fit(
         "[bold magenta]Learning Pipeline Examples - Phase 2[/bold magenta]\n"
-        "Complete reflection → curation → learning cycle",
+        "Complete reflection -> curation -> learning cycle",
         border_style="magenta"
     ))
 
@@ -272,7 +272,7 @@ async def main():
         import traceback
         traceback.print_exc()
 
-    console.print("[bold green]✓ All examples completed![/bold green]\n")
+    console.print("[bold green]OK All examples completed![/bold green]\n")
 
 
 if __name__ == "__main__":

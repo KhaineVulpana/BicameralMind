@@ -1,14 +1,14 @@
-"""Learning Pipeline: Orchestrates Reflection → Curation → Memory Update.
+"""Learning Pipeline: Orchestrates Reflection -> Curation -> Memory Update.
 
 This is the complete learning cycle:
 
-1. Execute task → Generate trace
+1. Execute task -> Generate trace
 2. Consciousness ticks determine if/how to reflect
-3. Reflector analyzes trace → Extracts insights
-4. Curator converts insights → Creates bullets
+3. Reflector analyzes trace -> Extracts insights
+4. Curator converts insights -> Creates bullets
 5. Bullets added to procedural memory (quarantined)
 6. Outcomes update bullet scores
-7. Successful bullets activate → Promote to shared
+7. Successful bullets activate -> Promote to shared
 
 This module provides a high-level API for the entire learning process.
 """
@@ -25,6 +25,8 @@ from .reflector import Reflector, ExecutionTrace, ReflectionInsight, OutcomeType
 from .curator import Curator
 from .procedural_memory import ProceduralMemory
 from .bullet import Bullet, Hemisphere
+from .suggestion_store import SuggestionStore
+from .suggestion_delivery import SuggestionDelivery
 
 
 @dataclass
@@ -95,7 +97,15 @@ class LearningPipeline:
         """
         self.memory = memory
         self.reflector = Reflector(llm_client)
-        self.curator = Curator(memory)
+        cross_cfg = memory.get_cross_hemisphere_config()
+        suggestions_cfg = (cross_cfg or {}).get("suggestions", {}) if cross_cfg else {}
+        self.suggestion_store = None
+        self.suggestion_delivery = None
+        if cross_cfg and cross_cfg.get("enabled") and suggestions_cfg.get("enabled"):
+            store_path = suggestions_cfg.get("store_path", "./data/memory/suggestions.jsonl")
+            self.suggestion_store = SuggestionStore(store_path)
+            self.suggestion_delivery = SuggestionDelivery(memory, self.suggestion_store, cross_cfg)
+        self.curator = Curator(memory, suggestion_store=self.suggestion_store, config=cross_cfg)
 
         # Statistics
         self.learning_history: List[LearningResult] = []
@@ -119,7 +129,7 @@ class LearningPipeline:
             LearningResult with statistics
         """
         logger.info(
-            f"🎓 Learning from trace {trace.trace_id[:12]}... "
+            f" Learning from trace {trace.trace_id[:12]}... "
             f"(hemisphere={trace.hemisphere}, tick_rate={tick_rate:.2f})"
         )
 
@@ -145,7 +155,7 @@ class LearningPipeline:
         )
 
         if not should_reflect:
-            logger.debug("  ⊘ Skipping reflection (tick rate too low)")
+            logger.debug("   Skipping reflection (tick rate too low)")
             # Still record outcome for bullets that were used
             self._record_trace_outcome(trace, result)
             return result
@@ -158,7 +168,7 @@ class LearningPipeline:
         result.insights_extracted = len(insights)
 
         if not insights:
-            logger.debug("  ⊘ No insights extracted")
+            logger.debug("   No insights extracted")
             self._record_trace_outcome(trace, result)
             return result
 
@@ -177,7 +187,7 @@ class LearningPipeline:
 
         # Log summary
         logger.success(
-            f"✓ Learning complete: {result.insights_extracted} insights → "
+            f"OK Learning complete: {result.insights_extracted} insights -> "
             f"{result.bullets_created} bullets "
             f"(depth={depth}, +{result.bullets_marked_helpful}/-{result.bullets_marked_harmful})"
         )
@@ -224,7 +234,7 @@ class LearningPipeline:
             expected_success=expected_success,
         )
 
-        logger.debug(f"🔍 Calculated tick_rate={tick_rate:.2f} from trace novelty")
+        logger.debug(f" Calculated tick_rate={tick_rate:.2f} from trace novelty")
 
         # Use standard learning pipeline with calculated tick rate
         return await self.learn_from_trace(
@@ -254,11 +264,37 @@ class LearningPipeline:
             side=hemisphere,
         )
 
+        # Generate cross-hemisphere suggestions from successful bullets
+        if helpful and self.suggestion_store:
+            self._maybe_generate_suggestions(trace.bullets_used, hemisphere)
+
+        if helpful:
+            self._maybe_mark_cross_confirmation(trace.bullets_used)
+
         # Update result stats
         if helpful:
             result.bullets_marked_helpful = len(trace.bullets_used)
         else:
             result.bullets_marked_harmful = len(trace.bullets_used)
+
+    def _maybe_generate_suggestions(self, bullet_ids: List[str], hemisphere: Hemisphere) -> None:
+        """Create suggestions for eligible bullets."""
+        bullets = self.memory.get_bullets_by_ids(bullet_ids)
+        if not bullets:
+            return
+        self.curator.generate_suggestions(
+            bullets=bullets,
+            from_side=hemisphere,
+            reason="successful_outcome",
+        )
+
+    def _maybe_mark_cross_confirmation(self, bullet_ids: List[str]) -> None:
+        """Mark origin bullets as cross-confirmed when taught bullets succeed."""
+        bullets = self.memory.get_bullets_by_ids(bullet_ids)
+        for bullet in bullets:
+            origin_id = bullet.metadata.get("origin_bullet_id") if bullet.metadata else None
+            if origin_id:
+                self.memory.update_bullet_metadata(origin_id, {"cross_confirmed": True})
 
     def record_outcome(
         self,
@@ -282,6 +318,17 @@ class LearningPipeline:
             side=hemisphere,
         )
 
+    def deliver_suggestions(
+        self,
+        tick_profile: Optional[Dict[str, Any]] = None,
+        to_side: Optional[str] = None,
+    ) -> List[Any]:
+        """Deliver pending suggestions under tick-gated conditions."""
+        if not self.suggestion_delivery:
+            return []
+        profile = tick_profile or {"is_idle": True, "pressure": 0.0}
+        return self.suggestion_delivery.deliver_pending(profile, to_side=to_side)
+
     async def run_maintenance(
         self,
         hemisphere: Hemisphere,
@@ -302,7 +349,7 @@ class LearningPipeline:
         Returns:
             Statistics about maintenance operations
         """
-        logger.info(f"🧹 Running maintenance for {hemisphere.value}")
+        logger.info(f" Running maintenance for {hemisphere.value}")
 
         stats = {
             "hemisphere": hemisphere.value,
@@ -339,7 +386,7 @@ class LearningPipeline:
             stats["promoted"] = len(promoted_ids)
 
         logger.success(
-            f"✓ Maintenance complete: "
+            f"OK Maintenance complete: "
             f"pruned={stats['pruned']}, "
             f"deduplicated={stats['deduplicated']}, "
             f"promoted={stats['promoted']}"
@@ -386,6 +433,7 @@ def create_trace(
     tools_called: Optional[List[str]] = None,
     tick_rate: float = 0.5,
     confidence: float = 0.5,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> ExecutionTrace:
     """Create an execution trace.
 
@@ -428,4 +476,5 @@ def create_trace(
         error_message=error_message,
         tick_rate=tick_rate,
         confidence=confidence,
+        metadata=metadata or {},
     )

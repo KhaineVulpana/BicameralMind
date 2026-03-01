@@ -1,8 +1,7 @@
-"""MCP Integration for Bicameral Mind"""
-import asyncio
-from typing import Dict, Any, List, Optional
+"""MCP Integration for Bicameral Mind."""
+from typing import Any, Dict
 
-# MCP integration template - implement when MCP servers configured
+from .mcp_client import MCPClient
 
 
 class MCPIntegration:
@@ -19,27 +18,20 @@ class MCPIntegration:
         self.config = config.get("mcp", {})
         self.servers = self.config.get("servers", [])
         self.connected = False
+        self.client = MCPClient(config)
     
     async def connect(self):
         """Connect to configured MCP servers"""
-        if not self.config.get("enabled", False):
-            return
-        
-        # TODO: Implement MCP server connections
-        # Example:
-        # for server in self.servers:
-        #     await self._connect_server(server)
-        
-        self.connected = True
+        await self.client.connect()
+        self.connected = self.client.connected
     
     async def call_tool(self, tool_name: str, params: Dict[str, Any]) -> Any:
         """Call an MCP tool"""
-        # TODO: Implement tool calling
-        pass
+        return await self.client.call_tool(tool_name=tool_name, parameters=params)
     
     async def disconnect(self):
         """Disconnect from MCP servers"""
-        # TODO: Implement disconnection
+        await self.client.disconnect()
         self.connected = False
 
 

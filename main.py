@@ -25,7 +25,7 @@ async def interactive_mode(mind: BicameralMind):
         "  /status - View consciousness state\n"
         "  /history - View conversation history\n"
         "  /quit - Exit",
-        title="🧠 Welcome"
+        title=" Welcome"
     ))
     
     await mind.start()

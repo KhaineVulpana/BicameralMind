@@ -91,7 +91,7 @@ async def example_automatic_tick_generation():
     result = await pipeline.learn_from_trace_auto_tick(
         trace=trace,
         meta_controller=meta_controller,
-        expected_success=True,  # Expected success, got failure → high novelty
+        expected_success=True,  # Expected success, got failure -> high novelty
     )
 
     print(f"  Tick Rate (auto): {result.tick_rate:.2f}")

@@ -1,66 +1,248 @@
 model:
-  name: "llama3:8b"  # adjusted for local hardware  # Change to your preferred Ollama model
+  name: qwen3:14b
   temperature: 0.7
   max_tokens: 2048
-
+server:
+  host: 0.0.0.0
+  port: 8000
+  cors_allowed_origins:
+  - "*"
+  # Set a token for /v1 endpoints; empty disables auth.
+  auth_token: ""
+  # Allow high-risk tool calls (terminal/write) requested by v1 clients.
+  allow_high_risk_tools: false
+storage:
+  root: ./data
 bicameral:
-  tick_interval: 0.5  # seconds between consciousness ticks
+  tick_interval: 0.5
   tick_threshold:
-    entropy: 0.6  # uncertainty threshold
-    conflict: 0.5  # inter-brain conflict threshold
-    novelty: 0.7  # pattern novelty threshold
-  
+    entropy: 0.6
+    conflict: 0.5
+    novelty: 0.7
+  adaptive_tick: true
+  min_tick_interval: 0.1
+  max_tick_interval: 2.0
+  energy_budget_enabled: true
+  max_energy: 100.0
+  energy_regen_rate: 10.0
+  energy_cost_explore: 15.0
+  energy_cost_exploit: 5.0
+  energy_cost_integrate: 20.0
   left_brain:
-    name: "PatternRecognition"
-    focus: "stability"
+    name: PatternRecognition
+    focus: stability
+    k_bullets: 8
+    min_bullet_confidence: 0.5
     behaviors:
-      - "compress_patterns"
-      - "classify"
-      - "replicate_known"
-      - "validate_consistency"
-    
+    - compress_patterns
+    - classify
+    - replicate_known
+    - validate_consistency
   right_brain:
-    name: "PatternMutation"
-    focus: "exploration"
+    name: PatternMutation
+    focus: exploration
+    k_bullets: 12
+    min_bullet_confidence: 0.3
     behaviors:
-      - "detect_anomalies"
-      - "mutate_patterns"
-      - "generate_variants"
-      - "explore_novel"
-
+    - detect_anomalies
+    - mutate_patterns
+    - generate_variants
+    - explore_novel
 rag:
   enabled: true
   chunk_size: 512
   chunk_overlap: 50
   top_k: 5
-  retrieval_mode: "agentic"  # agentic or single-pass
+  retrieval_mode: agentic
   max_iterations: 5
-
 vector_store:
-  type: "chroma"  # chroma or faiss
-  persist_directory: "./data/vector_store"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-
-mcp:
-  # Enable MCP to allow the bicameral mind to call external tools via the
-  # Model Context Protocol.  When ``enabled`` is true the system will
-  # attempt to connect to the servers listed below.  Each entry should
-  # include a ``name`` and connection parameters appropriate for your
-  # environment.  See ``integrations/mcp/mcp_integration.py`` for
-  # implementation details and examples.
+  type: chroma
+  persist_directory: ./data/vector_store
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+episodic_memory:
+  path: ./data/memory/episodes.jsonl
+  persist_directory: ./data/vector_store/episodes
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  top_k: 5
+tools:
   enabled: true
+  allow_high_risk_chat: false
+  registry_path: ./data/tools/tool_registry.json
+  index_persist_directory: ./data/vector_store/tools
+  index_collection: tool_registry
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  auto_discover: true
+  auto_index: true
+  allowed_tools: []
+  blocked_tools: []
+mcp:
+  enabled: true
+  connection_timeout: 30
+  tool_timeout: 60
+  max_retries: 3
+  # Mock fallback is intended for unit tests only. Keep OFF in normal runs.
+  mock_on_failure: false
+  allowed_tools: []
+  blocked_tools: []
+  auto_learn: true
+  learn_on_success: true
+  learn_on_failure: true
   servers:
-    - name: "hubspot"
-      type: "api"
-      # The endpoint value is a placeholder.  Configure this with the
-      # appropriate MCP server or API proxy that exposes your tools.
-      endpoint: ""  # e.g. "http://localhost:5000/mcp/hubspot"
-
+  - name: filesystem
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-filesystem'
+    - ./data
+    tool_timeout: 30
+    enabled: true
+    description: Read/write files and directories
+    category: filesystem
+  - name: powershell
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@executeautomation/powershell-mcp-server'
+    # This package is known to 404 in many environments; prefer built-in `cli.powershell`
+    # tools unless you have a working PowerShell MCP server package installed.
+    enabled: false
+    description: Execute PowerShell commands
+    category: system
+  - name: puppeteer
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-puppeteer'
+    enabled: false
+    description: Control web browser, navigate pages
+    category: web
+  - name: github
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-github'
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+    enabled: false
+    description: Manage repos, issues, PRs
+    category: development
+  - name: brave_search
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-brave-search'
+    env:
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+    enabled: false
+    description: Search the web
+    category: web
+  - name: sequential_thinking
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-sequential-thinking'
+    enabled: false
+    description: Step-by-step reasoning
+    category: reasoning
+  - name: memory
+    type: stdio
+    command: npx
+    args:
+    - -y
+    - '@modelcontextprotocol/server-memory'
+    enabled: false
+    description: Persistent notes storage
+    category: utility
 memory:
   short_term_capacity: 20
   long_term_persistence: true
   consolidation_threshold: 10
-
+procedures:
+  path: ./data/memory/procedures.jsonl
+procedural_memory:
+  enabled: true
+  persist_directory: ./data/memory/procedural
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  promote_threshold: 3
+  quarantine_threshold: 2
+  k_left: 8
+  k_right: 16
+  k_shared: 5
+  learning:
+    reflection_enabled: true
+    auto_curate: true
+    min_insight_confidence: 0.5
+    deep_reflection_llm: true
+  staging:
+    enabled: true
+    auto_assign: true
+    auto_assign_threshold: 0.85
+    manual_review_threshold: 0.7
+  maintenance:
+    enabled: true
+    deduplicate_enabled: true
+    dedup_threshold: 0.9
+    dedup_schedule: daily
+    dedup_scope: per_hemisphere
+    dedup_min_cluster_size: 2
+    prune_enabled: true
+    prune_policy: balanced
+    prune_schedule: weekly
+    prune_min_age_days: 14
+    prune_harmful_ratio: 1.5
+    prune_quarantine_age_days: 30
+    low_confidence_threshold: 0.2
+    backup_before_prune: true
+    backup_directory: ./data/memory/backups
+    max_prune_per_run: 100
+    require_confirmation_threshold: 50
+    keep_prune_history: true
+    prune_history_days: 90
+    batch_size: 100
+    parallel_processing: false
+  cross_hemisphere:
+    mode: shared_only
+    enabled: true
+    suggestions:
+      enabled: false
+      store_path: ./data/memory/suggestions.jsonl
+      suggest_threshold: 2
+      min_suggest_confidence: 0.65
+      deliver_when_idle: true
+      max_pressure_to_deliver: 0.35
+      deliver_budget_per_tick: 1
+      max_pending: 2000
+      expiry_days: 14
+    shared:
+      promote_threshold: 3
+      harmful_tolerance: 0
+      require_cross_confirmation: false
+      translate_on_promote: true
+    conflicts:
+      enabled: true
+      policy: quarantine_and_flag
+    diversity:
+      enabled: true
+      convergence_warning_threshold: 0.15
+      throttle_on_convergence: true
+    exploration:
+      enabled: true
+      mode: quota
+      window_size: 50
+      min_right_fraction: 0.25
+      interval_ticks: 20
+      stuck_window: 6
+      drift_boost_multiplier: 2.0
+      allow_right_critic_on_high_risk: true
+      exploration_safe_override: false
+novelty_detection:
+  novelty_decay: 0.8
 logging:
-  level: "INFO"
-  file: "./logs/bicameral_mind.log"
+  level: INFO
+  file: ./logs/bicameral_mind.log

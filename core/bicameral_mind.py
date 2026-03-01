@@ -1,15 +1,25 @@
 """Bicameral Mind: Main Orchestrator"""
 import asyncio
 from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
 import yaml
 from loguru import logger
-from langchain_community.llms import Ollama
+
+from core.llm_client import LLMClient
 
 from core.left_brain.agent import LeftBrain
 from core.right_brain.agent import RightBrain
 from core.meta_controller.controller import MetaController, CognitiveMode
 from core.base_agent import Message, MessageType
 from integrations.rag.agentic_rag import AgenticRAG
+from core.memory import ProceduralMemory
+from core.tools import initialize_tools, register_mcp_tools
+from core.memory import EpisodicStore
+
+try:
+    from integrations.mcp import MCPClient
+except Exception:
+    MCPClient = None
 
 
 class BicameralMind:
@@ -23,39 +33,125 @@ class BicameralMind:
     - Agentic RAG: Iterative knowledge retrieval
     """
     
-    def __init__(self, config_path: str = "config/config.yaml"):
+    def __init__(self, config_path: Any = "config/config.yaml"):
         # Load config
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
+        if isinstance(config_path, dict):
+            self.config = config_path
+        else:
+            with open(config_path, 'r') as f:
+                self.config = yaml.safe_load(f)
         
-        # Initialize LLM
-        model_config = self.config.get("model", {})
-        self.llm = Ollama(
-            model=model_config.get("name", "qwen2.5:14b"),
-            temperature=model_config.get("temperature", 0.7)
-        )
-        
-        # Initialize brain hemispheres
-        self.left_brain = LeftBrain(self.config, self.llm)
-        self.right_brain = RightBrain(self.config, self.llm)
-        
+        # Initialize LLM(s)
+        model_config = self.config.get("model", {}) or {}
+        slow_cfg = model_config.get("slow") or model_config
+        fast_cfg = model_config.get("fast") or {}
+
+        def _pick(cfg: Dict[str, Any]) -> Dict[str, Any]:
+            out: Dict[str, Any] = {}
+            for key in ("name", "temperature", "base_url", "max_tokens"):
+                if key in cfg:
+                    out[key] = cfg[key]
+            return out
+
+        slow_model_cfg = _pick(slow_cfg)
+        fast_model_cfg = dict(slow_model_cfg)
+        fast_model_cfg.update(_pick(fast_cfg))
+
+        self.llm = LLMClient({"model": slow_model_cfg})
+        self.llm_fast = LLMClient({"model": fast_model_cfg})
+
+        # Initialize procedural memory FIRST
+        self.memory = ProceduralMemory(self.config)
+        self.episodic_store = EpisodicStore(self.config)
+
+        # Initialize brain hemispheres WITH procedural memory
+        self.left_brain = LeftBrain(self.config, self.llm, procedural_memory=self.memory)
+        self.right_brain = RightBrain(self.config, self.llm, procedural_memory=self.memory)
+
         # Initialize meta-controller
         self.meta_controller = MetaController(
             self.config,
             self.left_brain,
             self.right_brain
         )
-        
+
+        # Initialize tool system (framework-agnostic)
+        self.mcp_client = None
+        if self.config.get("mcp", {}).get("enabled", False) and MCPClient:
+            self.mcp_client = MCPClient(self.config)
+
+        try:
+            self.tool_registry, self.tool_executor, self.tool_index = initialize_tools(
+                self.config,
+                mcp_client=self.mcp_client,
+            )
+        except Exception as e:
+            logger.warning(f"Tool system initialization failed: {e}")
+            self.tool_registry = None
+            self.tool_executor = None
+            self.tool_index = None
+
         # Initialize RAG if enabled
         self.rag = None
         if self.config.get("rag", {}).get("enabled", False):
-            self.rag = AgenticRAG(self.config, self.llm)
+            self.rag = AgenticRAG(self.config, self.llm, llm_fast=self.llm_fast, llm_slow=self.llm)
         
         # State
         self.running = False
         self.conversation_history = []
         
-        logger.info("🧠 Bicameral Mind initialized")
+        logger.info(" Bicameral Mind initialized")
+
+    def set_models(self, slow_name: str, *, fast_name: Optional[str] = None) -> None:
+        """Update active Ollama model(s) at runtime.
+
+        This recreates LLM clients and rebinds them into dependent components.
+        """
+        slow_name = (slow_name or "").strip()
+        fast_name = (fast_name or "").strip() if fast_name is not None else ""
+        if not slow_name:
+            raise ValueError("slow_name is required")
+
+        model_cfg = (self.config.get("model", {}) or {})
+        slow_cfg = model_cfg.get("slow") or model_cfg
+        fast_cfg = model_cfg.get("fast") or {}
+
+        # Persist config structure in-memory (api endpoint handles file persistence).
+        model_cfg = dict(model_cfg)
+        model_cfg["slow"] = dict(slow_cfg or {})
+        model_cfg["slow"]["name"] = slow_name
+        if fast_name:
+            model_cfg["fast"] = dict(fast_cfg or {})
+            model_cfg["fast"]["name"] = fast_name
+        else:
+            model_cfg.pop("fast", None)
+        self.config["model"] = model_cfg
+
+        def _pick(cfg: Dict[str, Any]) -> Dict[str, Any]:
+            out: Dict[str, Any] = {}
+            for key in ("name", "temperature", "base_url", "max_tokens"):
+                if key in cfg:
+                    out[key] = cfg[key]
+            return out
+
+        slow_model_cfg = _pick(model_cfg.get("slow") or {})
+        fast_model_cfg = dict(slow_model_cfg)
+        fast_model_cfg.update(_pick(model_cfg.get("fast") or {}))
+
+        self.llm = LLMClient({"model": slow_model_cfg})
+        self.llm_fast = LLMClient({"model": fast_model_cfg})
+
+        # Rebind into brains
+        if getattr(self, "left_brain", None):
+            self.left_brain.llm = self.llm
+        if getattr(self, "right_brain", None):
+            self.right_brain.llm = self.llm
+
+        # Rebind into RAG
+        if getattr(self, "rag", None):
+            self.rag.llm = self.llm
+            self.rag.llm_slow = self.llm
+            self.rag.llm_fast = self.llm_fast
     
     async def start(self):
         """Start the bicameral mind system"""
@@ -63,13 +159,32 @@ class BicameralMind:
         
         # Start meta-controller tick system
         asyncio.create_task(self.meta_controller.start_ticker())
+
+        # Connect MCP and register MCP tools if enabled
+        if self.mcp_client and self.config.get("mcp", {}).get("enabled", False):
+            try:
+                await self.mcp_client.connect()
+                if self.tool_registry:
+                    await register_mcp_tools(
+                        self.tool_registry,
+                        self.tool_index,
+                        self.mcp_client,
+                    )
+            except Exception as e:
+                logger.warning(f"MCP connect/register failed: {e}")
         
-        logger.success("✨ Bicameral Mind activated")
+        logger.success(" Bicameral Mind activated")
     
     def stop(self):
         """Stop the system"""
         self.running = False
         self.meta_controller.stop_ticker()
+        if self.mcp_client:
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.mcp_client.disconnect())
+            except RuntimeError:
+                pass
         logger.info("Bicameral Mind deactivated")
     
     async def process(self, user_input: str, use_rag: bool = True) -> Dict[str, Any]:
@@ -83,7 +198,7 @@ class BicameralMind:
         4. Synthesize response
         """
         
-        logger.info(f"📥 Processing: '{user_input[:50]}...'")
+        logger.info(f" Processing: '{user_input[:50]}...'")
         
         # Get context from RAG if enabled
         rag_context = None
@@ -128,6 +243,49 @@ class BicameralMind:
         else:
             # Idle - default to integration
             result = await self._process_integrate(msg_content)
+
+        if isinstance(result, dict):
+            result.setdefault("rag_context", rag_context)
+
+            used_ids: List[str] = []
+            if "bullets_used" in result and isinstance(result.get("bullets_used"), list):
+                used_ids = [str(x) for x in (result.get("bullets_used") or []) if x]
+            elif isinstance(result.get("bullets"), dict):
+                all_ids = result.get("bullets", {}).get("all", [])
+                if isinstance(all_ids, list):
+                    used_ids = [str(x) for x in all_ids if x]
+
+            if self.memory and getattr(self.memory, "enabled", False) and used_ids:
+                try:
+                    bullets = self.memory.get_bullets_by_ids(used_ids)
+                    serialized = []
+                    for b in bullets:
+                        created_at = b.created_at
+                        if isinstance(created_at, datetime) and created_at.tzinfo is not None:
+                            created_at = created_at.astimezone(timezone.utc).replace(tzinfo=None)
+                        last_used_at = b.last_used_at
+                        if isinstance(last_used_at, datetime) and last_used_at.tzinfo is not None:
+                            last_used_at = last_used_at.astimezone(timezone.utc).replace(tzinfo=None)
+                        serialized.append(
+                            {
+                                "id": b.id,
+                                "text": b.text,
+                                "side": b.side.value if hasattr(b.side, "value") else str(b.side),
+                                "type": b.type.value if hasattr(b.type, "value") else str(b.type),
+                                "status": b.status.value if hasattr(b.status, "value") else str(b.status),
+                                "tags": list(b.tags or []),
+                                "confidence": float(getattr(b, "confidence", 0.5) or 0.5),
+                                "helpful_count": int(getattr(b, "helpful_count", 0) or 0),
+                                "harmful_count": int(getattr(b, "harmful_count", 0) or 0),
+                                "score": float(b.score()) if hasattr(b, "score") else 0.0,
+                                "created_at": created_at.isoformat() if isinstance(created_at, datetime) else "",
+                                "last_used_at": last_used_at.isoformat() if isinstance(last_used_at, datetime) else "",
+                            }
+                        )
+                    serialized.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+                    result["retrieved_bullets"] = serialized
+                except Exception as exc:
+                    logger.debug(f"Failed to serialize retrieved bullets: {exc}")
         
         # Add to history
         self.conversation_history.append({
@@ -138,6 +296,13 @@ class BicameralMind:
         })
         
         return result
+
+    async def process_input(self, user_input: str, use_rag: bool = True) -> str:
+        """Compatibility wrapper for older UI code paths."""
+        result = await self.process(user_input, use_rag=use_rag)
+        if isinstance(result, dict):
+            return result.get("output", str(result))
+        return str(result)
     
     async def _process_exploit(self, content: Dict) -> Dict[str, Any]:
         """Process through left brain (pattern matching)"""
@@ -156,7 +321,9 @@ class BicameralMind:
             "output": response.content,
             "hemisphere": "left",
             "mode": "exploit",
-            "confidence": response.metadata.get("state", {}).get("confidence", 0.0)
+            "confidence": response.metadata.get("state", {}).get("confidence", 0.0),
+            "bullets_used": list(response.metadata.get("bullets_used") or []),
+            "bullets_count": int(response.metadata.get("bullets_count") or 0),
         }
     
     async def _process_explore(self, content: Dict) -> Dict[str, Any]:
@@ -176,7 +343,9 @@ class BicameralMind:
             "output": response.content,
             "hemisphere": "right",
             "mode": "explore",
-            "novelty": response.metadata.get("state", {}).get("entropy", 0.0)
+            "novelty": response.metadata.get("state", {}).get("entropy", 0.0),
+            "bullets_used": list(response.metadata.get("bullets_used") or []),
+            "bullets_count": int(response.metadata.get("bullets_count") or 0),
         }
     
     async def _process_integrate(self, content: Dict) -> Dict[str, Any]:
@@ -204,12 +373,24 @@ class BicameralMind:
         # Integrate responses
         integrated = await self._integrate_responses(left_response, right_response, content)
         
+        left_ids = list((left_response.metadata or {}).get("bullets_used") or [])
+        right_ids = list((right_response.metadata or {}).get("bullets_used") or [])
+        combined: List[str] = []
+        seen = set()
+        for bid in [*left_ids, *right_ids]:
+            if not bid or bid in seen:
+                continue
+            seen.add(bid)
+            combined.append(bid)
+
         return {
             "output": integrated,
             "hemisphere": "both",
             "mode": "integrate",
             "left": left_response.content,
-            "right": right_response.content
+            "right": right_response.content,
+            "bullets": {"left": left_ids, "right": right_ids, "all": combined},
+            "bullets_count": len(combined),
         }
     
     async def _integrate_responses(self, left: Message, right: Message, context: Dict) -> str:

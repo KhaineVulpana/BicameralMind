@@ -1,0 +1,122 @@
+{
+  "name": "bicameralmind",
+  "displayName": "BicameralMind",
+  "description": "VS Code client for the BicameralMind desktop backend.",
+  "publisher": "bicameralmind",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:bicameralmind.chatView",
+    "onCommand:bicameralmind.openChat",
+    "onCommand:bicameralmind.resetSession",
+    "onCommand:bicameralmind.reconnect"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bicameralmind",
+          "title": "BicameralMind",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "bicameralmind": [
+        {
+          "id": "bicameralmind.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "bicameralmind.openChat",
+        "title": "BicameralMind: Open Chat"
+      },
+      {
+        "command": "bicameralmind.resetSession",
+        "title": "BicameralMind: Reset Session"
+      },
+      {
+        "command": "bicameralmind.reconnect",
+        "title": "BicameralMind: Reconnect Backend"
+      }
+    ],
+    "configuration": {
+      "title": "BicameralMind",
+      "properties": {
+        "bicameralmind.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Backend URL for the BicameralMind desktop service."
+        },
+        "bicameralmind.authToken": {
+          "type": "string",
+          "default": "",
+          "description": "Bearer token for /v1 endpoints (optional)."
+        },
+        "bicameralmind.streamResponses": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stream responses using SSE."
+        },
+        "bicameralmind.allowHighRiskTools": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow high-risk local tool execution (terminal/apply edits)."
+        },
+        "bicameralmind.contextIncludeWorkspace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically include a workspace file overview in context."
+        },
+        "bicameralmind.contextIncludeOpenFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically include currently open files in context."
+        },
+        "bicameralmind.contextMaxFiles": {
+          "type": "number",
+          "default": 200,
+          "minimum": 1,
+          "description": "Max number of files to include when summarizing the workspace or a selected folder."
+        },
+        "bicameralmind.contextMaxOpenFiles": {
+          "type": "number",
+          "default": 4,
+          "minimum": 0,
+          "description": "Max number of open files to include in context."
+        },
+        "bicameralmind.contextMaxFileBytes": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 256,
+          "description": "Max bytes per file when embedding file contents into context."
+        },
+        "bicameralmind.contextMaxTotalBytes": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 1024,
+          "description": "Max total bytes across all file contents in context."
+        },
+        "bicameralmind.contextExcludeGlob": {
+          "type": "string",
+          "default": "**/{node_modules,.git,dist,build,out,venv,.venv,__pycache__}/**",
+          "description": "Glob to exclude when listing workspace or folder files for context."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.4.5"
+  }
+}

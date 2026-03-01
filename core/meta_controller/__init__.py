@@ -2,6 +2,7 @@
 
 from .controller import MetaController, CognitiveMode, TickMetrics
 from .novelty_detector import NoveltyDetector, NoveltySignal, NoveltyMeasurement
+from .exploration_policy import ExplorationPolicy, ExplorationDecision
 
 __all__ = [
     'MetaController',
@@ -10,4 +11,6 @@ __all__ = [
     'NoveltyDetector',
     'NoveltySignal',
     'NoveltyMeasurement',
+    'ExplorationPolicy',
+    'ExplorationDecision',
 ]

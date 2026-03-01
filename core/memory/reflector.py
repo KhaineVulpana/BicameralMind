@@ -142,15 +142,15 @@ class Reflector:
             trace: Execution trace to analyze
             depth: Reflection depth (shallow, medium, deep)
                    Typically controlled by tick rate:
-                   - Low ticks → shallow (routine)
-                   - Medium ticks → medium (mild novelty)
-                   - High ticks → deep (failure/novelty)
+                   - Low ticks -> shallow (routine)
+                   - Medium ticks -> medium (mild novelty)
+                   - High ticks -> deep (failure/novelty)
 
         Returns:
             List of insights extracted from the trace
         """
         logger.debug(
-            f"🔍 Reflecting on trace {trace.trace_id[:12]}... "
+            f" Reflecting on trace {trace.trace_id[:12]}... "
             f"(depth={depth}, outcome={trace.outcome.value})"
         )
 
@@ -163,7 +163,7 @@ class Reflector:
             insights = self._medium_reflection(trace)
 
         logger.info(
-            f"💡 Extracted {len(insights)} insights from trace "
+            f" Extracted {len(insights)} insights from trace "
             f"({trace.outcome.value})"
         )
 
@@ -315,7 +315,7 @@ class Reflector:
 
         steps_str = "\n".join([
             f"{i+1}. {step.get('description', 'N/A')} - "
-            f"{'✓ success' if step.get('success') else '✗ failed'}"
+            f"{'OK success' if step.get('success') else 'X failed'}"
             for i, step in enumerate(trace.steps[:10])  # Limit context
         ])
 
